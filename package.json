@@ -1,0 +1,23 @@
+{
+  "name": "hc-poc",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "jest --verbose"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ajsantander/hc-poc.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/ajsantander/hc-poc/issues"
+  },
+  "homepage": "https://github.com/ajsantander/hc-poc#readme",
+  "devDependencies": {
+    "jest": "^24.8.0"
+  }
+}

@@ -1,0 +1,47 @@
+{
+  "contractName": "Voting",
+  "abi": [],
+  "metadata": "{\"compiler\":{\"version\":\"0.5.10+commit.5a6ea5b1\"},\"language\":\"Solidity\",\"output\":{\"abi\":[],\"devdoc\":{\"methods\":{}},\"userdoc\":{\"methods\":{}}},\"settings\":{\"compilationTarget\":{\"Voting.sol\":\"Voting\"},\"evmVersion\":\"petersburg\",\"libraries\":{},\"optimizer\":{\"enabled\":false,\"runs\":200},\"remappings\":[]},\"sources\":{\"Voting.sol\":{\"keccak256\":\"0xcc6d49871fee83eba06ecb1c994fef23414676bcae0784350e0eab7a62da39c4\",\"urls\":[\"bzzr://dfe620b0ef59c7755aa29d756dcafac931b38cdd1f44a31ddcfef5d32e4dad95\",\"dweb:/ipfs/QmNxM8pqBmUCLZofFSCbRDbcpL15YhGJn1T3QuTmRydVzf\"]}},\"version\":1}",
+  "bytecode": "6080604052348015600f57600080fd5b50603e80601d6000396000f3fe6080604052600080fdfea265627a7a723058207e8de0d0a64ab9c862ead8ab9f1d541e0b2295ccfc25e9445fcead44f1bc4bab64736f6c634300050a0032",
+  "deployedBytecode": "6080604052600080fdfea265627a7a723058207e8de0d0a64ab9c862ead8ab9f1d541e0b2295ccfc25e9445fcead44f1bc4bab64736f6c634300050a0032",
+  "ast": {
+    "absolutePath": "Voting.sol",
+    "exportedSymbols": {
+      "Voting": [
+        2
+      ]
+    },
+    "id": 3,
+    "nodeType": "SourceUnit",
+    "nodes": [
+      {
+        "id": 1,
+        "literals": [
+          "solidity",
+          "^",
+          "0.5",
+          ".0"
+        ],
+        "nodeType": "PragmaDirective",
+        "src": "0:23:0"
+      },
+      {
+        "baseContracts": [],
+        "contractDependencies": [],
+        "contractKind": "contract",
+        "documentation": null,
+        "fullyImplemented": true,
+        "id": 2,
+        "linearizedBaseContracts": [
+          2
+        ],
+        "name": "Voting",
+        "nodeType": "ContractDefinition",
+        "nodes": [],
+        "scope": 3,
+        "src": "25:22:0"
+      }
+    ],
+    "src": "0:48:0"
+  }
+}
