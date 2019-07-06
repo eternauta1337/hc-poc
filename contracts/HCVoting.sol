@@ -21,12 +21,13 @@ contract HCVoting {
     uint256 absMajorityVoteTime;
 
     // Votes.
-    enum Vote { Yea, Nay }
+    enum Vote { Absent, Yea, Nay }
     struct Proposal {
         bool executed;
         uint256 startDate;
         uint256 yea;
         uint256 nay;
+        mapping (address => Vote) votes;
     }
     mapping (uint256 => Proposal) internal proposals;
     uint256 public numProposals;
@@ -40,6 +41,7 @@ contract HCVoting {
 
     // Events.
     event StartProposal(uint256 indexed proposalId, address indexed creator, string metadata);
+    event CastVote(uint256 indexed voteId, address indexed voter, bool supports, uint256 stake);
   
     // Constructor (Could be replaced by an initializer).
     constructor(
@@ -75,11 +77,12 @@ contract HCVoting {
     }
 
     // Vote on a proposal.
+    // TODO: Guard on who can vote?
     function vote(uint256 _proposalId, bool _supports) public {
-        require(_userHasVotingPower(msg.sender), ERROR_USER_HAS_NO_VOTING_POWER);
         require(_proposalExists(_proposalId), ERROR_PROPOSAL_DOES_NOT_EXIST);
         require(_proposalIsOpen(_proposalId), ERROR_PROPOSAL_IS_CLOSED);
-        _vote(_proposalId, _supports);
+        require(_userHasVotingPower(msg.sender), ERROR_USER_HAS_NO_VOTING_POWER);
+        _vote(_proposalId, _supports, msg.sender);
     }
 
     /*
@@ -96,8 +99,35 @@ contract HCVoting {
         emit StartProposal(proposalId, msg.sender, _metadata);
     }
 
-    function _vote(uint256 _proposalId, bool _supports) internal {
-        // TODO
+    function _vote(uint256 _proposalId, bool _supports, address _voter) internal {
+        Proposal storage proposal_ = proposals[_proposalId];
+
+        // Get the user's voting power.
+        uint256 votingPower = voteToken.balanceOf(_voter);
+
+        // Has the user previously voted?
+        Vote previousVote = proposal_.votes[_voter];
+
+        // Clean up the user's previous vote, if existent.
+        if(previousVote == Vote.Yea) {
+            proposal_.yea = proposal_.yea.sub(votingPower);
+        }
+        else if(previousVote == Vote.Nay) {
+            proposal_.nay = proposal_.nay.sub(votingPower);
+        }
+
+        // Update the user's vote in the proposal's yea/nay count.
+        if(_supports) {
+            proposal_.yea = proposal_.yea.add(votingPower);
+        }
+        else {
+            proposal_.nay = proposal_.nay.add(votingPower);
+        }
+
+        // Update the user's vote state.
+        proposal_.votes[_voter] = _supports ? Vote.Yea : Vote.Nay;
+
+        emit CastVote(_proposalId, _voter, _supports, votingPower);
     }
 
     function _userHasVotingPower(address _voter) internal returns (bool) {
