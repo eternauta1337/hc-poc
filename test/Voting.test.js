@@ -27,7 +27,7 @@ describe('Voting', () => {
               gasPrice: 1
             };
 
-            // Deploy Token contract.
+            // Deploy Token contract and mint some tokens.
             tokenContract = await deploy('Token', [], txParams);
 
             // Deploy Voting contract.
@@ -61,37 +61,82 @@ describe('Voting', () => {
             expect(proposalLifeTime).toBe(PROPOSAL_LIFETIME);
         });
 
-        describe('When creating a proposal', () => {
+        describe('When creating a few proposals', () => {
 
             let proposalCreationReceipt;
 
             beforeEach(async () => {
-                proposalCreationReceipt = await votingContract.methods.createProposal("DAOs should rule the world").send(txParams);
+                for(let i = 0; i < 3; i++) {
+                    proposalCreationReceipt = await votingContract.methods.createProposal(`DAOs should rule the world ${i}`).send(txParams);
+                }
             });
 
             it('numProposals should increase', async () => {
-                expect(await votingContract.methods.numProposals().call()).toBe(`1`);
+                expect(await votingContract.methods.numProposals().call()).toBe(`3`);
             });
 
-            it('Emits a CreateProposal event', async () => {
+            it('Emits a CreateProposal event with appropriate data', async () => {
                 expect(proposalCreationReceipt.events.StartProposal).not.toBeNull();
                 const args = proposalCreationReceipt.events.StartProposal.returnValues;
-                expect(args._proposalId).toBe(`0`);
+                expect(args._proposalId).toBe(`2`);
                 expect(args._creator).toBe(accounts[0]);
-                expect(args._metadata).toBe(`DAOs should rule the world`);
+                expect(args._metadata).toBe(`DAOs should rule the world 2`);
             });
 
-            // it.only('Should retrieve the proposal', async () => {
-            //     const proposal = await votingContract.methods.getProposal(1).call();
-            //     console.log(`proposal`, proposal);
-            // });
+            it('Should retrieve the proposal', async () => {
+                const proposal = await votingContract.methods.getProposal(2).call();
+                expect(proposal.finalized).toBe(false);
+                expect(proposal.yea).toBe(`0`);
+                expect(proposal.nay).toBe(`0`);
+                const startDateDeltaSecs = ( new Date().getTime() / 1000 ) - parseInt(proposal.startDate, 10);
+                expect(startDateDeltaSecs).toBeLessThan(2);
+            });
             
-        //     describe('Voting on proposals', () => {
+            describe('When voting on proposals', () => {
+
+                beforeEach(async () => {
+
+                    // Mint some vote tokens.
+                    await tokenContract.methods.mint(accounts[0], 1).send(txParams);
+                    await tokenContract.methods.mint(accounts[1], 1).send(txParams);
+                    await tokenContract.methods.mint(accounts[2], 1).send(txParams);
+                });
+
+                it('Should allow addresses that own tokens to vote on an open proposal', async () => {
+
+                    await votingContract.methods.vote(1, true).send({ ...txParams, from: accounts[0] });
+                    await votingContract.methods.vote(1, true).send({ ...txParams, from: accounts[1] });
+                    await votingContract.methods.vote(1, false).send({ ...txParams, from: accounts[2] });
+
+                    const proposal = await votingContract.methods.getProposal(1).call();
+                    expect(proposal.yea).toBe(`2`);
+                    expect(proposal.nay).toBe(`1`);
+
+                    let vote;
+                    vote = await votingContract.methods.getVote(1, accounts[0]).call();
+                    expect(vote).toBe(`1`);
+                    vote = await votingContract.methods.getVote(1, accounts[1]).call();
+                    expect(vote).toBe(`1`);
+                    vote = await votingContract.methods.getVote(1, accounts[2]).call();
+                    expect(vote).toBe(`2`);
+                });
+
+                // it('Should reject voting on proposals that have expired', async () => {
+                    
+                // });
+
+                // it('Should reject voting on proposals that do not exist', async () => {
+                    
+                // });
+
+                // it('Should reject voting by accounts that own no tokens', async () => {
+                    
+                // });
 
         //         describe('Finalizing proposals', () => {
                     
         //         });
-        //     });
+            });
         });
     });
 });

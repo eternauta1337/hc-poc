@@ -27,5 +27,13 @@ describe('Token', () => {
         expect(web3.utils.isAddress(tokenContract.options.address)).toBe(true);
     });
 
-    // TODO: Basic ERC20 tests...
+    it('Can mint tokens', async () => {
+        await tokenContract.methods.mint(accounts[0], 1).send(txParams);
+        const totalSupply = await tokenContract.methods.totalSupply().call();
+        expect(totalSupply).toBe(`1`);
+        const balance = await tokenContract.methods.balanceOf(accounts[0]).call();
+        expect(balance).toBe(`1`);
+    });
+
+    // TODO: More basic ERC20 tests...
 });

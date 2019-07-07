@@ -92,6 +92,11 @@ contract Voting {
         nay = proposal_.nay;
     }
 
+    function getVote(uint256 _proposalId, address _voter) public view returns (Vote) {
+        Proposal storage proposal_ = proposals[_proposalId];
+        return proposal_.votes[_voter];
+    }
+
     // TODO: Guard on who can vote?
     function vote(uint256 _proposalId, bool _supports) public {
         require(_proposalExists(_proposalId), ERROR_PROPOSAL_DOES_NOT_EXIST);
