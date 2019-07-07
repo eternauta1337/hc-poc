@@ -12,10 +12,10 @@ describe('Voting', () => {
 
     // TODO: Test invalid deploy parameters
 
-    const ABS_MAJORITY_PCT = `${51 * 10 ** 16}`;
-    const PROPOSAL_LIFETIME = `5`;
+    const ABS_MAJORITY_PCT = `${51 * 10 ** 16}`; // 51%
+    const PROPOSAL_LIFETIME = `5`; // 5 seconds
 
-    describe('Basic Voting contract setup', () => {
+    describe('When setting up a Voting contract', () => {
     
         beforeEach(async () => {
         
@@ -61,14 +61,37 @@ describe('Voting', () => {
             expect(proposalLifeTime).toBe(PROPOSAL_LIFETIME);
         });
 
-        // describe('Creating proposals', () => {
+        describe('When creating a proposal', () => {
+
+            let proposalCreationReceipt;
+
+            beforeEach(async () => {
+                proposalCreationReceipt = await votingContract.methods.createProposal("DAOs should rule the world").send(txParams);
+            });
+
+            it('numProposals should increase', async () => {
+                expect(await votingContract.methods.numProposals().call()).toBe(`1`);
+            });
+
+            it('Emits a CreateProposal event', async () => {
+                expect(proposalCreationReceipt.events.StartProposal).not.toBeNull();
+                const args = proposalCreationReceipt.events.StartProposal.returnValues;
+                expect(args._proposalId).toBe(`0`);
+                expect(args._creator).toBe(accounts[0]);
+                expect(args._metadata).toBe(`DAOs should rule the world`);
+            });
+
+            // it.only('Should retrieve the proposal', async () => {
+            //     const proposal = await votingContract.methods.getProposal(1).call();
+            //     console.log(`proposal`, proposal);
+            // });
             
         //     describe('Voting on proposals', () => {
-                
+
         //         describe('Finalizing proposals', () => {
                     
         //         });
         //     });
-        // });
+        });
     });
 });

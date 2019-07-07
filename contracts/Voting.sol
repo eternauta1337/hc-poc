@@ -39,7 +39,7 @@ contract Voting {
     string private constant ERROR_NOT_ENOUGH_ABSOLUTE_SUPPORT = "VOTING_NOT_ENOUGH_ABSOLUTE_SUPPORT";
 
     // Events.
-    event StartProposal(uint256 indexed _proposalId, address indexed _creator, string metadata);
+    event StartProposal(uint256 indexed _proposalId, address indexed _creator, string _metadata);
     event CastVote(uint256 indexed _proposalId, address indexed voter, bool _supports, uint256 _stake);
     event FinalizeProposal(uint256 indexed _proposalId);
   
@@ -68,12 +68,28 @@ contract Voting {
      */
 
     function createProposal(string memory _metadata) public returns (uint256 proposalId) {
-        proposalId = numProposals++;
+        proposalId = numProposals;
+        numProposals++;
 
         Proposal storage proposal_ = proposals[proposalId];
         proposal_.startDate = now;
 
         emit StartProposal(proposalId, msg.sender, _metadata);
+    }
+
+    function getProposal(uint256 _proposalId) public view returns (
+        bool finalized,
+        uint256 startDate,
+        uint256 yea,
+        uint256 nay
+    ) {
+        require(_proposalExists(_proposalId), ERROR_PROPOSAL_DOES_NOT_EXIST);
+
+        Proposal storage proposal_ = proposals[_proposalId];
+        finalized = proposal_.finalized;
+        startDate = proposal_.startDate;
+        yea = proposal_.yea;
+        nay = proposal_.nay;
     }
 
     // TODO: Guard on who can vote?
@@ -132,33 +148,31 @@ contract Voting {
      * Internal functions.
      */
 
-    function _votesToPct(uint256 votes) internal returns (uint256) {
+    function _votesToPct(uint256 votes) internal view returns (uint256) {
         return votes.mul(PCT_MAX) / voteToken.totalSupply();
     }
 
-    function _userHasVotingPower(address _voter) internal returns (bool) {
+    function _userHasVotingPower(address _voter) internal view returns (bool) {
         return voteToken.balanceOf(_voter) > 0;
     }
 
-    function _proposalExists(uint256 _proposalId) internal returns (bool) {
+    function _proposalExists(uint256 _proposalId) internal view returns (bool) {
         return _proposalId < numProposals;
     }
 
-    function _proposalIsOpen(uint256 _proposalId) internal returns (bool) {
-        Proposal storage proposal_ = proposals[_proposalId];
+    function _proposalIsOpen(uint256 _proposalId) internal view returns (bool) {
         return 
             _proposalIsNotFinalized(_proposalId) && 
             _proposalIsNotExpired(_proposalId);
     }
 
-    function _proposalIsNotFinalized(uint256 _proposalId) internal returns (bool) {
+    function _proposalIsNotFinalized(uint256 _proposalId) internal view returns (bool) {
         Proposal storage proposal_ = proposals[_proposalId];
         return !proposal_.finalized;
     }
 
-    function _proposalIsNotExpired(uint256 _proposalId) internal returns (bool) {
+    function _proposalIsNotExpired(uint256 _proposalId) internal view returns (bool) {
         Proposal storage proposal_ = proposals[_proposalId];
         return now < proposal_.startDate.add(proposalLifeTime);
     }
-
 }
