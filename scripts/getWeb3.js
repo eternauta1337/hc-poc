@@ -8,7 +8,7 @@ const defaultNetworks = {
   localhost: "http://localhost:8545"
 };
 
-module.exports = async (network) => {
+module.exports = (network) => {
   const provider = defaultNetworks[network] ? defaultNetworks[network] : network;
   return new Web3(provider);
 };

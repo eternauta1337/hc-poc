@@ -1,36 +1,31 @@
-const fs = require('fs');
 const getWeb3 = require('../scripts/getWeb3.js');
+const deploy = require('../scripts/deploy.js');
 
 describe('Token', () => {
+    const web3 = getWeb3('localhost');
 
-  // TODO: Remove this dummy test case.
-  test('Should run', async () => {
-    const web3 = await getWeb3('localhost');
+    let accounts;
+    let txParams;
+    let tokenContract;
+    let votingContract;
 
-    // Prepare tx params.
-    const accounts = await web3.eth.getAccounts();
-    const params = {
-      from: accounts[0],
-      gas: 3000000,
-      gasPrice: '20000000000'
-    };
+    beforeEach(async () => {
+    
+        // Get accounts and tx params.
+        accounts = await web3.eth.getAccounts();
+        txParams = {
+          from: accounts[0],
+          gas: 5000000,
+          gasPrice: 1
+        };
 
-    // Deploy contract.
-    console.log(`Deploying contract...`);
-    const artifacts = JSON.parse(fs.readFileSync('build/Token.json', 'utf8'));
-    const contract = new web3.eth.Contract(artifacts.abi);
-    const instance = await contract.deploy({
-      data: artifacts.bytecode
-    }).send(params)
-    const address = instance.options.address;
-    console.log(`Contract deployed at:`, address);
+        // Deploy Token contract.
+        tokenContract = await deploy('Token', [], txParams);
+    });
 
-    // Interact with contract.
-    console.log(`Interacting with contract...`);
-    const ping = await instance.methods.testToken().call(params);
-    console.log(`ping`, ping);
+    it('Token gets deployed correctly', async () => {
+        expect(web3.utils.isAddress(tokenContract.options.address)).toBe(true);
+    });
 
-    // Dummy pass.
-    expect(1).toBe(1);
-  });
+    // TODO: Basic ERC20 tests...
 });

@@ -2,7 +2,8 @@ const pocketh = require('./pocketh.js');
 
 // Retrieve a list of all contracts to compile.
 const contractPaths = [
-  'Token.sol',
+    'Token.sol',
+    'Voting.sol',
 ];
 
 // Cleanup previous compilations.
