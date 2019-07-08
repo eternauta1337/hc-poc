@@ -1,6 +1,7 @@
 const getWeb3 = require('../scripts/getWeb3.js');
 const deploy = require('../scripts/deploy.js');
 const util = require('../scripts/util.js');
+const reverts = require('../scripts/reverts.js');
 
 describe('HCVoting', () => {
 
@@ -66,27 +67,22 @@ describe('HCVoting', () => {
             });
 
             test('Should reject staking on proposals that do not exist', async () => {
-                let error;
-                try {
-                    await votingContract.methods.addUpstakeToProposal(9, 1).send({ ...txParams, from: accounts[0] });
-                }
-                catch(e) { error = e }
-                expect(error.message).toContain(`VOTING_ERROR_PROPOSAL_DOES_NOT_EXIST`);
-                try {
-                    await votingContract.methods.addDownstakeToProposal(9, 1).send({ ...txParams, from: accounts[0] });
-                }
-                catch(e) { error = e }
-                expect(error.message).toContain(`VOTING_ERROR_PROPOSAL_DOES_NOT_EXIST`);
-                try {
-                    await votingContract.methods.removeUpstakeFromProposal(9, 1).send({ ...txParams, from: accounts[0] });
-                }
-                catch(e) { error = e }
-                expect(error.message).toContain(`VOTING_ERROR_PROPOSAL_DOES_NOT_EXIST`);
-                try {
-                    await votingContract.methods.removeDownstakeFromProposal(9, 1).send({ ...txParams, from: accounts[0] });
-                }
-                catch(e) { error = e }
-                expect(error.message).toContain(`VOTING_ERROR_PROPOSAL_DOES_NOT_EXIST`);
+                expect(await reverts(
+                    votingContract.methods.addUpstakeToProposal(9, 1).send({ ...txParams, from: accounts[0] }),
+                    `VOTING_ERROR_PROPOSAL_DOES_NOT_EXIST`
+                )).toBe(true);
+                expect(await reverts(
+                    votingContract.methods.addDownstakeToProposal(9, 1).send({ ...txParams, from: accounts[0] }),
+                    `VOTING_ERROR_PROPOSAL_DOES_NOT_EXIST`
+                )).toBe(true);
+                expect(await reverts(
+                    votingContract.methods.removeUpstakeFromProposal(9, 1).send({ ...txParams, from: accounts[0] }),
+                    `VOTING_ERROR_PROPOSAL_DOES_NOT_EXIST`
+                )).toBe(true);
+                expect(await reverts(
+                    votingContract.methods.removeDownstakeFromProposal(9, 1).send({ ...txParams, from: accounts[0] }),
+                    `VOTING_ERROR_PROPOSAL_DOES_NOT_EXIST`
+                )).toBe(true);
             });
 
             // describe('That are still open', () => {

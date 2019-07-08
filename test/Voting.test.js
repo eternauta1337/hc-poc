@@ -1,6 +1,7 @@
 const getWeb3 = require('../scripts/getWeb3.js');
 const deploy = require('../scripts/deploy.js');
 const util = require('../scripts/util.js');
+const reverts = require('../scripts/reverts.js');
 
 describe('Voting', () => {
 
@@ -111,12 +112,10 @@ describe('Voting', () => {
                 });
 
                 test('Should reject voting on proposals that do not exist', async () => {
-                    let error;
-                    try {
-                        await votingContract.methods.vote(9, true).send({ ...txParams, from: accounts[0] });
-                    }
-                    catch(e) { error = e }
-                    expect(error.message).toContain(`VOTING_ERROR_PROPOSAL_DOES_NOT_EXIST`);
+                    expect(await reverts(
+                        votingContract.methods.vote(9, true).send({ ...txParams, from: accounts[0] }),
+                        `VOTING_ERROR_PROPOSAL_DOES_NOT_EXIST`
+                    )).toBe(true);
                 });
 
                 describe('That are still open', () => {
@@ -146,12 +145,10 @@ describe('Voting', () => {
                     });
 
                     test('Should reject voting by accounts that own no tokens', async () => {
-                        let error;
-                        try {
-                            await votingContract.methods.vote(1, true).send({ ...txParams, from: accounts[9] });
-                        }
-                        catch(e) { error = e }
-                        expect(error.message).toContain(`VOTING_ERROR_USER_HAS_NO_VOTING_POWER`);
+                        expect(await reverts(
+                            votingContract.methods.vote(1, true).send({ ...txParams, from: accounts[9] }),
+                            `VOTING_ERROR_USER_HAS_NO_VOTING_POWER`
+                        )).toBe(true);
                     });
 
                     describe('When finalizing proposals', () => {
@@ -165,12 +162,10 @@ describe('Voting', () => {
 
                             // Try to finalize the proposal.
                             // An error is expected, because the proposal has not reached an absolute majority.
-                            let error;
-                            try {
-                                await votingContract.methods.finalizeProposal(1).send({ ...txParams });
-                            }
-                            catch(e) { error = e }
-                            expect(error.message).toContain(`VOTING_NOT_ENOUGH_ABSOLUTE_SUPPORT`);
+                            expect(await reverts(
+                                votingContract.methods.finalizeProposal(1).send({ ...txParams }),
+                                `VOTING_NOT_ENOUGH_ABSOLUTE_SUPPORT`
+                            )).toBe(true);
                         });
                         
                         test('Should allow to finalize a proposal with absolute majority approval, emitting an event', async () => {
@@ -227,12 +222,10 @@ describe('Voting', () => {
                     });
                     
                     test('Should reject voting on proposals that have expired', async () => {
-                        let error;
-                        try {
-                            await votingContract.methods.vote(0, true).send({ ...txParams, from: accounts[0] })
-                        }
-                        catch(e) { error = e };
-                        expect(error.message).toContain(`VOTING_ERROR_PROPOSAL_IS_CLOSED`);
+                        expect(await reverts(
+                            votingContract.methods.vote(0, true).send({ ...txParams, from: accounts[0] }),
+                            `VOTING_ERROR_PROPOSAL_IS_CLOSED`
+                        )).toBe(true);
                     });
 
                     // TODO: Test finalizing a proposal that expired
