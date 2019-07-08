@@ -10,8 +10,6 @@ describe('Voting', () => {
     let tokenContract;
     let votingContract;
 
-    const PCT_MULTIPLIER = 10 ** 16;
-
     beforeAll(async () => {
         web3 = getWeb3('localhost');
         accounts = await web3.eth.getAccounts();
@@ -34,7 +32,7 @@ describe('Voting', () => {
             // Deploy Voting contract.
             votingContract = await deploy('Voting', [
                 tokenContract.options.address,
-                `${51 * PCT_MULTIPLIER}`,
+                51,
                 5
             ], txParams);
         });
@@ -54,7 +52,7 @@ describe('Voting', () => {
 
         test('Has the correct absolute majority value set', async () => {
             const absMajoritySupportPct = await votingContract.methods.absMajoritySupportPct().call();
-            expect(absMajoritySupportPct).toBe(`${51 * PCT_MULTIPLIER}`);
+            expect(absMajoritySupportPct).toBe(`51`);
         });
 
         test('Has the correct proposal lifetime set', async () => {

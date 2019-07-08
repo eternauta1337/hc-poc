@@ -6,15 +6,15 @@ module.exports = function pocketh(...args) {
     const pocketh = spawn(`pocketh`, args);
 
     pocketh.stdout.on('data', data => {
-      console.log(data.toString());
+      console.log(`  ${data.toString()}`);
     });
 
     pocketh.stderr.on('data', data => {
-      console.log(data.toString());
+      console.log(`  ${data.toString()}`);
     });
 
     pocketh.on('exit', code => {
-      console.log(`pocketh exited with code ${code}`);
+      console.log(`  pocketh exited with code ${code}`);
       if(code === 0) resolve();
       if(code >= 1) reject();
     });
