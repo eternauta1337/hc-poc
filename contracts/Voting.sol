@@ -27,7 +27,11 @@ contract Voting {
         uint256 startDate;
         uint256 yea;
         uint256 nay;
+        uint256 upstake;
+        uint256 downstake;
         mapping (address => Vote) votes;
+        mapping (address => uint256) upstakers;
+        mapping (address => uint256) downstakers;
     }
 
     function getProposal(uint256 _proposalId) public view returns (
@@ -35,7 +39,9 @@ contract Voting {
         bool boosted,
         uint256 startDate,
         uint256 yea,
-        uint256 nay
+        uint256 nay,
+        uint256 upstake,
+        uint256 downstake
     ) {
         require(_proposalExists(_proposalId), ERROR_PROPOSAL_DOES_NOT_EXIST);
 
@@ -45,6 +51,8 @@ contract Voting {
         startDate = proposal_.startDate;
         yea = proposal_.yea;
         nay = proposal_.nay;
+        upstake = proposal_.upstake;
+        downstake = proposal_.downstake;
     }
 
     // Vote percentages.
@@ -79,6 +87,7 @@ contract Voting {
     ) 
         public
     {
+        // TODO: Need to cast here or can have param type directly?
         voteToken = Token(_voteToken);
 
         // Validate and assign percentages.

@@ -26,7 +26,7 @@ describe('Voting', () => {
     
         beforeEach(async () => {
             
-            // Deploy Token contract and mint some tokens.
+            // Deploy Token contract.
             tokenContract = await deploy('Token', [], txParams);
 
             // Deploy and initialize Voting contract.
@@ -110,6 +110,15 @@ describe('Voting', () => {
                     await tokenContract.methods.mint(accounts[5], 1).send({ ...txParams });
                 });
 
+                test('Should reject voting on proposals that do not exist', async () => {
+                    let error;
+                    try {
+                        await votingContract.methods.vote(9, true).send({ ...txParams, from: accounts[0] });
+                    }
+                    catch(e) { error = e }
+                    expect(error.message).toContain(`VOTING_ERROR_PROPOSAL_DOES_NOT_EXIST`);
+                });
+
                 describe('That are still open', () => {
                     
                     // TODO: Test emit vote event
@@ -134,15 +143,6 @@ describe('Voting', () => {
                         expect(vote).toBe(`1`);
                         vote = await votingContract.methods.getVote(1, accounts[2]).call();
                         expect(vote).toBe(`2`);
-                    });
-
-                    test('Should reject voting on proposals that do not exist', async () => {
-                        let error;
-                        try {
-                            await votingContract.methods.vote(9, true).send({ ...txParams, from: accounts[0] });
-                        }
-                        catch(e) { error = e }
-                        expect(error.message).toContain(`VOTING_ERROR_PROPOSAL_DOES_NOT_EXIST`);
                     });
 
                     test('Should reject voting by accounts that own no tokens', async () => {
