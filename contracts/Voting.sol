@@ -13,7 +13,7 @@ contract Voting is Proposals {
     // Percentages are represented as a uint256 between 0 and 10^18 (or xx * 10^16),
     // i.e. 0% = 0; 1% = 1 * 10^16; 50% = 50 * 10^16; 100% = 100 * 10^18.
     uint256 internal constant PCT_MULTIPLIER = 10 ** 16;
-    uint256 public absMajoritySupportPct; // Percentage required for a vote to pass with absolute majority, e.g. 50%.
+    uint256 public supportPct; // Percentage required for a vote to pass with absolute majority, e.g. 50%.
 
     // Error messages.
     string internal constant ERROR_INIT_SUPPORT_TOO_SMALL      = "VOTING_ERROR_INIT_SUPPORT_TOO_SMALL";
@@ -26,10 +26,14 @@ contract Voting is Proposals {
     event CastVote(uint256 indexed _proposalId, address indexed voter, bool _supports, uint256 _stake);
     event FinalizeProposal(uint256 indexed _proposalId);
   
-    // Constructor (Could be replaced by an initializer).
-    constructor(
+    /*
+     * External functions.
+     */
+
+    // TODO: Guard for only once calling.
+    function initializeVoting(
         address _voteToken, 
-        uint256 _absMajoritySupportPct,
+        uint256 _supportPct,
         uint256 _proposalLifeTime
     ) 
         public
@@ -37,18 +41,15 @@ contract Voting is Proposals {
         voteToken = Token(_voteToken);
 
         // Validate and assign percentages.
-        require(_absMajoritySupportPct >= 50, ERROR_INIT_SUPPORT_TOO_SMALL);
-        require(_absMajoritySupportPct < 100, ERROR_INIT_SUPPORT_TOO_BIG);
-        absMajoritySupportPct = _absMajoritySupportPct;
+        require(_supportPct >= 50, ERROR_INIT_SUPPORT_TOO_SMALL);
+        require(_supportPct < 100, ERROR_INIT_SUPPORT_TOO_BIG);
+        supportPct = _supportPct;
 
         // Assign vote time.
         // TODO: Require a min absolute majority vote time?
         proposalLifeTime = _proposalLifeTime;
     }
 
-    /*
-     * External functions.
-     */
 
     function createProposal(string memory _metadata) public returns (uint256 proposalId) {
         proposalId = numProposals;
@@ -107,9 +108,8 @@ contract Voting is Proposals {
         
         Proposal storage proposal_ = proposals[_proposalId];
 
-        // Has enough support been reached?
-        uint256 yeaPct = _votesToPct(proposal_.yea);
-        require(yeaPct > absMajoritySupportPct * PCT_MULTIPLIER, ERROR_NOT_ENOUGH_ABSOLUTE_SUPPORT);
+        // Standard proposal resolution (absolute majority).
+        _finalizeProposal(proposal_);
 
         // Finalize the proposal.
         proposal_.finalized = true;
@@ -117,12 +117,19 @@ contract Voting is Proposals {
         emit FinalizeProposal(_proposalId);
     }
 
+    function _finalizeProposal(Proposal storage proposal_) internal {
+
+        // Has enough support been reached?
+        uint256 yeaPct = _votesToPct(proposal_.yea, voteToken.totalSupply());
+        require(yeaPct > supportPct * PCT_MULTIPLIER, ERROR_NOT_ENOUGH_ABSOLUTE_SUPPORT);
+    }
+
     /*
      * Internal functions.
      */
 
-    function _votesToPct(uint256 votes) internal view returns (uint256) {
-        return votes.mul(100 * PCT_MULTIPLIER) / voteToken.totalSupply();
+    function _votesToPct(uint256 votes, uint256 totalVotes) internal view returns (uint256) {
+        return votes.mul(100 * PCT_MULTIPLIER) / totalVotes;
     }
 
     function _userHasVotingPower(address _voter) internal view returns (bool) {

@@ -22,6 +22,7 @@ contract Proposals {
     // Proposals.
     struct Proposal {
         bool finalized;
+        bool boosted;
         uint256 startDate;
         uint256 yea;
         uint256 nay;
@@ -30,6 +31,7 @@ contract Proposals {
 
     function getProposal(uint256 _proposalId) public view returns (
         bool finalized,
+        bool boosted,
         uint256 startDate,
         uint256 yea,
         uint256 nay
@@ -38,6 +40,7 @@ contract Proposals {
 
         Proposal storage proposal_ = proposals[_proposalId];
         finalized = proposal_.finalized;
+        boosted = proposal_.boosted;
         startDate = proposal_.startDate;
         yea = proposal_.yea;
         nay = proposal_.nay;

@@ -29,12 +29,13 @@ describe('Voting', () => {
             // Deploy Token contract and mint some tokens.
             tokenContract = await deploy('Token', [], txParams);
 
-            // Deploy Voting contract.
-            votingContract = await deploy('Voting', [
+            // Deploy and initialize Voting contract.
+            votingContract = await deploy('Voting', [], txParams);
+            await votingContract.methods.initializeVoting(
                 tokenContract.options.address,
                 51,
                 5
-            ], txParams);
+            ).send({ ...txParams });
         });
 
         test('Token gets deployed correctly', async () => {
@@ -51,8 +52,8 @@ describe('Voting', () => {
         });
 
         test('Has the correct absolute majority value set', async () => {
-            const absMajoritySupportPct = await votingContract.methods.absMajoritySupportPct().call();
-            expect(absMajoritySupportPct).toBe(`51`);
+            const supportPct = await votingContract.methods.supportPct().call();
+            expect(supportPct).toBe(`51`);
         });
 
         test('Has the correct proposal lifetime set', async () => {
@@ -70,7 +71,7 @@ describe('Voting', () => {
                 for(let i = 0; i < 3; i++) {
                     proposalCreationReceipt = await votingContract.methods.createProposal(
                         `DAOs should rule the world ${i}`
-                    ).send({ ...txParams })
+                    ).send({ ...txParams });
                 }
             });
 
@@ -79,7 +80,6 @@ describe('Voting', () => {
             });
 
             test('Emits a CreateProposal event with appropriate data', async () => {
-                // const proposalCreationReceipt = proposalCreationReceipts[2];
                 expect(proposalCreationReceipt.events.StartProposal).not.toBeNull();
                 const args = proposalCreationReceipt.events.StartProposal.returnValues;
                 expect(args._proposalId).toBe(`2`);
@@ -105,6 +105,9 @@ describe('Voting', () => {
                     await tokenContract.methods.mint(accounts[0], 1).send({ ...txParams });
                     await tokenContract.methods.mint(accounts[1], 1).send({ ...txParams });
                     await tokenContract.methods.mint(accounts[2], 1).send({ ...txParams });
+                    await tokenContract.methods.mint(accounts[3], 1).send({ ...txParams });
+                    await tokenContract.methods.mint(accounts[4], 1).send({ ...txParams });
+                    await tokenContract.methods.mint(accounts[5], 1).send({ ...txParams });
                 });
 
                 describe('That are still open', () => {
@@ -133,24 +136,6 @@ describe('Voting', () => {
                         expect(vote).toBe(`2`);
                     });
 
-                    test('Should allow to finalize a proposal that gains absolute majority approval, emitting an event', async () => {
-                        
-                        // Cast votes with enough support.
-                        await votingContract.methods.vote(1, true).send({ ...txParams, from: accounts[0] });
-                        await votingContract.methods.vote(1, true).send({ ...txParams, from: accounts[1] });
-                        await votingContract.methods.vote(1, false).send({ ...txParams, from: accounts[2] });
-
-                        // Finalize the proposal.
-                        const proposalFinalizationReceipt = await votingContract.methods.finalizeProposal(1).send({ ...txParams });
-                        expect(proposalFinalizationReceipt.events.FinalizeProposal).not.toBeNull();
-                        const args = proposalFinalizationReceipt.events.FinalizeProposal.returnValues;
-                        expect(args._proposalId).toBe(`1`);
-
-                        // Verify that the proposal is finalized.
-                        const proposal = await votingContract.methods.getProposal(1).call();
-                        expect(proposal.finalized).toBe(true);
-                    });
-
                     test('Should reject voting on proposals that do not exist', async () => {
                         let error;
                         try {
@@ -170,13 +155,33 @@ describe('Voting', () => {
                     });
 
                     describe('When finalizing proposals', () => {
+
+                        test('Should not allow a proposal to be resolved without absolute majority', async () => {
+                            
+                            // Cast votes with enough support.
+                            await votingContract.methods.vote(1, true ).send({ ...txParams, from: accounts[0] });
+                            await votingContract.methods.vote(1, true ).send({ ...txParams, from: accounts[1] });
+                            await votingContract.methods.vote(1, false).send({ ...txParams, from: accounts[5] });
+
+                            // Try to finalize the proposal.
+                            // An error is expected, because the proposal has not reached an absolute majority.
+                            let error;
+                            try {
+                                await votingContract.methods.finalizeProposal(1).send({ ...txParams });
+                            }
+                            catch(e) { error = e };
+                            expect(error.message).toContain(`VOTING_NOT_ENOUGH_ABSOLUTE_SUPPORT`);
+                        });
                         
                         test('Should allow to finalize a proposal that gains absolute majority approval, emitting an event', async () => {
                             
                             // Cast votes with enough support.
-                            await votingContract.methods.vote(1, true).send({ ...txParams, from: accounts[0] });
-                            await votingContract.methods.vote(1, true).send({ ...txParams, from: accounts[1] });
-                            await votingContract.methods.vote(1, false).send({ ...txParams, from: accounts[2] });
+                            await votingContract.methods.vote(1, true ).send({ ...txParams, from: accounts[0] });
+                            await votingContract.methods.vote(1, true ).send({ ...txParams, from: accounts[1] });
+                            await votingContract.methods.vote(1, true ).send({ ...txParams, from: accounts[2] });
+                            await votingContract.methods.vote(1, true ).send({ ...txParams, from: accounts[3] });
+                            await votingContract.methods.vote(1, false).send({ ...txParams, from: accounts[4] });
+                            await votingContract.methods.vote(1, false).send({ ...txParams, from: accounts[5] });
 
                             // Finalize the proposal.
                             const proposalFinalizationReceipt = await votingContract.methods.finalizeProposal(1).send({ ...txParams });
