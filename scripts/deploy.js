@@ -14,7 +14,7 @@ module.exports = async (contractName, args, txParams) => {
     const instance = await contract.deploy({
         arguments: args,
         data: artifacts.bytecode
-    }).send(txParams)
+    }).send({ ...txParams });
 
     return instance;
 };

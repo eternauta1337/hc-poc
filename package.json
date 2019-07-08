@@ -6,7 +6,7 @@
   "scripts": {
     "ganache": "ganache-cli --deterministic",
     "compile": "node ./scripts/compile.js",
-    "test": "jest --verbose"
+    "test": "jest --no-config --verbose"
   },
   "repository": {
     "type": "git",
@@ -23,6 +23,7 @@
     "jest": "^24.8.0"
   },
   "dependencies": {
+    "bn.js": "^4.11.8",
     "web3": "1.0.0-beta.37"
   },
   "jest": {
