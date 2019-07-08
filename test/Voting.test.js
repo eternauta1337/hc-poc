@@ -139,18 +139,18 @@ describe('Voting', () => {
                     test('Should reject voting on proposals that do not exist', async () => {
                         let error;
                         try {
-                            await votingContract.methods.vote(9, true).send({ ...txParams, from: accounts[0] })
+                            await votingContract.methods.vote(9, true).send({ ...txParams, from: accounts[0] });
                         }
-                        catch(e) { error = e };
+                        catch(e) { error = e }
                         expect(error.message).toContain(`VOTING_ERROR_PROPOSAL_DOES_NOT_EXIST`);
                     });
 
                     test('Should reject voting by accounts that own no tokens', async () => {
                         let error;
                         try {
-                            await votingContract.methods.vote(1, true).send({ ...txParams, from: accounts[9] })
+                            await votingContract.methods.vote(1, true).send({ ...txParams, from: accounts[9] });
                         }
-                        catch(e) { error = e };
+                        catch(e) { error = e }
                         expect(error.message).toContain(`VOTING_ERROR_USER_HAS_NO_VOTING_POWER`);
                     });
 
@@ -169,11 +169,11 @@ describe('Voting', () => {
                             try {
                                 await votingContract.methods.finalizeProposal(1).send({ ...txParams });
                             }
-                            catch(e) { error = e };
+                            catch(e) { error = e }
                             expect(error.message).toContain(`VOTING_NOT_ENOUGH_ABSOLUTE_SUPPORT`);
                         });
                         
-                        test('Should allow to finalize a proposal that gains absolute majority approval, emitting an event', async () => {
+                        test('Should allow to finalize a proposal with absolute majority approval, emitting an event', async () => {
                             
                             // Cast votes with enough support.
                             await votingContract.methods.vote(1, true ).send({ ...txParams, from: accounts[0] });
@@ -193,6 +193,30 @@ describe('Voting', () => {
                             const proposal = await votingContract.methods.getProposal(1).call();
                             expect(proposal.finalized).toBe(true);
                         });
+
+                        test('Should allow a boosted proposal to be resolved locally (without absolute majority)', async () => {
+
+                            // Create a proposal.
+                            await votingContract.methods.createProposal('A proposal should be resolvable locally if boosted').send({ ...txParams });
+                            
+                            // Create some votes (with no majority).
+                            await votingContract.methods.vote(0, true).send({ ...txParams, from: accounts[0] });
+                            await votingContract.methods.vote(0, true).send({ ...txParams, from: accounts[1] });
+                            await votingContract.methods.vote(0, false).send({ ...txParams, from: accounts[2] });
+
+                            // Boost the proposal.
+                            await votingContract.methods._boostProposal(0).send({ ...txParams });
+
+                            // Finalize the proposal.
+                            const proposalFinalizationReceipt = await votingContract.methods.finalizeProposal(0).send({ ...txParams });
+                            expect(proposalFinalizationReceipt.events.FinalizeProposal).not.toBeNull();
+                            const args = proposalFinalizationReceipt.events.FinalizeProposal.returnValues;
+                            expect(args._proposalId).toBe(`0`);
+
+                            // Verify that the proposal is finalized.
+                            const proposal = await votingContract.methods.getProposal(0).call();
+                            expect(proposal.finalized).toBe(true);
+                        });
                     });
                 });
 
@@ -210,6 +234,8 @@ describe('Voting', () => {
                         catch(e) { error = e };
                         expect(error.message).toContain(`VOTING_ERROR_PROPOSAL_IS_CLOSED`);
                     });
+
+                    // TODO: Test finalizing a proposal that expired
                 });
             });
         });
