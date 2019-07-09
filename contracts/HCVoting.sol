@@ -81,7 +81,6 @@ contract HCVoting is Voting {
 
     function removeUpstakeFromProposal(uint256 _proposalId, uint256 _amount) public {
         require(_proposalExists(_proposalId), ERROR_PROPOSAL_DOES_NOT_EXIST);
-        require(_proposalIsOpen(_proposalId), ERROR_PROPOSAL_IS_CLOSED);
 
         Proposal storage proposal_ = proposals[_proposalId];
 
@@ -105,7 +104,6 @@ contract HCVoting is Voting {
 
     function removeDownstakeFromProposal(uint256 _proposalId, uint256 _amount) public {
         require(_proposalExists(_proposalId), ERROR_PROPOSAL_DOES_NOT_EXIST);
-        require(_proposalIsOpen(_proposalId), ERROR_PROPOSAL_IS_CLOSED);
 
         Proposal storage proposal_ = proposals[_proposalId];
 

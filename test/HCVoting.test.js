@@ -94,9 +94,11 @@ describe('HCVoting', () => {
 
                     // Mint some stake tokens.
                     await stakeTokenContract.methods.mint(accounts[0], 1000).send({ ...txParams });
+                    await stakeTokenContract.methods.mint(accounts[1], 1000).send({ ...txParams });
 
                     // Increase allowance to the voting contract.
-                    await stakeTokenContract.methods.approve(votingContract.options.address, `${10 ** 18}`).send({ ...txParams });
+                    await stakeTokenContract.methods.approve(votingContract.options.address, `${10 ** 18}`).send({ ...txParams, from: accounts[0] });
+                    await stakeTokenContract.methods.approve(votingContract.options.address, `${10 ** 18}`).send({ ...txParams, from: accounts[1] });
                 });
                 
                 test('Should allow someone to stake on a proposal', async () => {
@@ -213,6 +215,75 @@ describe('HCVoting', () => {
                 test.todo('Should not allow a staker to stake more tokens that the staker owns');
                 test.todo('Multiple upstakes/downstakes reflect properly on a proposal\'s state');
 
+                describe('When finalizing proposals', () => {
+
+                    beforeEach(async () => {
+
+                        // Perform some stakes on the proposal.
+                        await votingContract.methods.addUpstakeToProposal(0, 10).send({ ...txParams, from: accounts[0] });
+                        await votingContract.methods.addDownstakeToProposal(0, 5).send({ ...txParams, from: accounts[1] });
+
+                        // Mint some vote tokens.
+                        await voteTokenContract.methods.mint(accounts[0], 1).send({ ...txParams });
+                        await voteTokenContract.methods.mint(accounts[1], 1).send({ ...txParams });
+                        await voteTokenContract.methods.mint(accounts[2], 1).send({ ...txParams });
+                        await voteTokenContract.methods.mint(accounts[3], 1).send({ ...txParams });
+                        await voteTokenContract.methods.mint(accounts[4], 1).send({ ...txParams });
+                        await voteTokenContract.methods.mint(accounts[5], 1).send({ ...txParams });
+                    });
+
+                    test('Should allow stakers to withdraw their stakes when a proposal is finalized (with absolute majority)', async () => {
+                        
+                        // Cast votes with enough support.
+                        await votingContract.methods.vote(0, true ).send({ ...txParams, from: accounts[0] });
+                        await votingContract.methods.vote(0, true ).send({ ...txParams, from: accounts[1] });
+                        await votingContract.methods.vote(0, true ).send({ ...txParams, from: accounts[2] });
+                        await votingContract.methods.vote(0, true ).send({ ...txParams, from: accounts[3] });
+                        await votingContract.methods.vote(0, false).send({ ...txParams, from: accounts[4] });
+                        await votingContract.methods.vote(0, false).send({ ...txParams, from: accounts[5] });
+
+                        // Finalize the proposal.
+                        const proposalFinalizationReceipt = await votingContract.methods.finalizeProposal(0).send({ ...txParams });
+                        expect(proposalFinalizationReceipt.events.FinalizeProposal).not.toBeNull();
+                        const args = proposalFinalizationReceipt.events.FinalizeProposal.returnValues;
+                        expect(args._proposalId).toBe(`0`);
+
+                        // Verify that the proposal is finalized.
+                        const proposal = await votingContract.methods.getProposal(0).call();
+                        expect(proposal.finalized).toBe(true);
+
+                        // Have stakers withdraw their tokens.
+                        await votingContract.methods.removeUpstakeFromProposal(0, 10).send({ ...txParams, from: accounts[0] });
+                        await votingContract.methods.removeDownstakeFromProposal(0, 5).send({ ...txParams, from: accounts[1] });
+
+                        // Verify that the stakers retrieved their tokens.
+                        expect(await stakeTokenContract.methods.balanceOf(accounts[0]).call()).toBe(`1000`);
+                        expect(await stakeTokenContract.methods.balanceOf(accounts[1]).call()).toBe(`1000`);
+                    });
+
+                    describe('That have expired', () => {
+
+                        beforeEach(async () => {
+                            await util.skipTime(PROPOSAL_LIFETIME_SECS + 1);
+                        });
+                        
+                        test('Should reject staking on proposals that have expired', async () => {
+                            expect(await reverts(
+                                votingContract.methods.addUpstakeToProposal(0, 10).send({ ...txParams }),
+                                `VOTING_ERROR_PROPOSAL_IS_CLOSED`
+                            )).toBe(true);
+                            expect(await reverts(
+                                votingContract.methods.addDownstakeToProposal(0, 10).send({ ...txParams }),
+                                `VOTING_ERROR_PROPOSAL_IS_CLOSED`
+                            )).toBe(true);
+                        });
+
+                        test.todo('Should allow stakers to withdraw their stake');
+
+                        // TODO: Test finalizing a proposal that expired
+                    });
+                });
+
                 describe('When boosting proposals', () => {
                     
                     test('Should boost a proposal that has enough confidence', async () => {
@@ -250,26 +321,6 @@ describe('HCVoting', () => {
                         expect(proposal.boosted).toBe(false);
                     });
                 });
-            });
-
-            describe('That have expired', () => {
-
-                beforeEach(async () => {
-                    await util.skipTime(PROPOSAL_LIFETIME_SECS + 1);
-                });
-                
-                test('Should reject staking on proposals that have expired', async () => {
-                    expect(await reverts(
-                        votingContract.methods.addUpstakeToProposal(0, 10).send({ ...txParams }),
-                        `VOTING_ERROR_PROPOSAL_IS_CLOSED`
-                    )).toBe(true);
-                    expect(await reverts(
-                        votingContract.methods.addDownstakeToProposal(0, 10).send({ ...txParams }),
-                        `VOTING_ERROR_PROPOSAL_IS_CLOSED`
-                    )).toBe(true);
-                });
-
-                // TODO: Test finalizing a proposal that expired
             });
         });
     });
