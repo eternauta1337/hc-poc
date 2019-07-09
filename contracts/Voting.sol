@@ -190,7 +190,7 @@ contract Voting {
      */
 
     // TODO: Make internal!
-    function _boostProposal(uint256 _proposalId) public {
+    function _boostProposal(uint256 _proposalId) internal {
         require(_proposalExists(_proposalId), ERROR_PROPOSAL_DOES_NOT_EXIST);
         require(_proposalIsOpen(_proposalId), ERROR_PROPOSAL_IS_CLOSED);
 

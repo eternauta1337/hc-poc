@@ -11,6 +11,9 @@ describe('Voting', () => {
     let tokenContract;
     let votingContract;
 
+    const PROPOSAL_SUPPORT = 51;
+    const PROPOSAL_LIFETIME_SECS = 60;
+
     beforeAll(async () => {
         web3 = getWeb3('localhost');
         accounts = await web3.eth.getAccounts();
@@ -34,8 +37,8 @@ describe('Voting', () => {
             votingContract = await deploy('Voting', [], txParams);
             await votingContract.methods.initializeVoting(
                 tokenContract.options.address,
-                51,
-                5
+                PROPOSAL_SUPPORT,
+                PROPOSAL_LIFETIME_SECS
             ).send({ ...txParams });
         });
 
@@ -59,7 +62,7 @@ describe('Voting', () => {
 
         test('Has the correct proposal lifetime set', async () => {
             const proposalLifeTime = await votingContract.methods.proposalLifeTime().call();
-            expect(proposalLifeTime).toBe(`5`);
+            expect(proposalLifeTime).toBe(`${PROPOSAL_LIFETIME_SECS}`);
         });
 
         describe('When creating proposals', () => {
@@ -189,27 +192,35 @@ describe('Voting', () => {
                             expect(proposal.finalized).toBe(true);
                         });
 
-                        test('Should allow a boosted proposal to be resolved locally (without absolute majority)', async () => {
+                        test('Should allow a boosted proposal to be resolved locally (with relative majority)', async () => {
+
+                            // Deploy a mock that allows to boost a proposal directly.
+                            const votingMockContract = await deploy('BoostingMock', [], txParams);
+                            await votingMockContract.methods.initializeVoting(
+                                tokenContract.options.address,
+                                PROPOSAL_SUPPORT,
+                                PROPOSAL_LIFETIME_SECS
+                            ).send({ ...txParams });
 
                             // Create a proposal.
-                            await votingContract.methods.createProposal('A proposal should be resolvable locally if boosted').send({ ...txParams });
+                            await votingMockContract.methods.createProposal('A proposal should be resolvable locally if boosted').send({ ...txParams });
                             
                             // Create some votes (with no majority).
-                            await votingContract.methods.vote(0, true).send({ ...txParams, from: accounts[0] });
-                            await votingContract.methods.vote(0, true).send({ ...txParams, from: accounts[1] });
-                            await votingContract.methods.vote(0, false).send({ ...txParams, from: accounts[2] });
+                            await votingMockContract.methods.vote(0, true).send({ ...txParams, from: accounts[0] });
+                            await votingMockContract.methods.vote(0, true).send({ ...txParams, from: accounts[1] });
+                            await votingMockContract.methods.vote(0, false).send({ ...txParams, from: accounts[2] });
 
                             // Boost the proposal.
-                            await votingContract.methods._boostProposal(0).send({ ...txParams });
+                            await votingMockContract.methods.boostProposal(0).send({ ...txParams });
 
                             // Finalize the proposal.
-                            const proposalFinalizationReceipt = await votingContract.methods.finalizeProposal(0).send({ ...txParams });
+                            const proposalFinalizationReceipt = await votingMockContract.methods.finalizeProposal(0).send({ ...txParams });
                             expect(proposalFinalizationReceipt.events.FinalizeProposal).not.toBeNull();
                             const args = proposalFinalizationReceipt.events.FinalizeProposal.returnValues;
                             expect(args._proposalId).toBe(`0`);
 
                             // Verify that the proposal is finalized.
-                            const proposal = await votingContract.methods.getProposal(0).call();
+                            const proposal = await votingMockContract.methods.getProposal(0).call();
                             expect(proposal.finalized).toBe(true);
                         });
                     });
@@ -218,7 +229,7 @@ describe('Voting', () => {
                 describe('That have expired', () => {
 
                     beforeEach(async () => {
-                        await util.skipTime(5 + 1);
+                        await util.skipTime(PROPOSAL_LIFETIME_SECS + 1);
                     });
                     
                     test('Should reject voting on proposals that have expired', async () => {

@@ -12,6 +12,9 @@ describe('HCVoting', () => {
     let stakeTokenContract;
     let votingContract;
 
+    const PROPOSAL_SUPPORT = 51;
+    const PROPOSAL_LIFETIME_SECS = 60;
+
     beforeAll(async () => {
         web3 = getWeb3('localhost');
         accounts = await web3.eth.getAccounts();
@@ -36,8 +39,8 @@ describe('HCVoting', () => {
             votingContract = await deploy('HCVoting', [], txParams);
             await votingContract.methods.initializeVoting(
                 voteTokenContract.options.address,
-                51,
-                5
+                PROPOSAL_SUPPORT,
+                PROPOSAL_LIFETIME_SECS
             ).send({ ...txParams });
             await votingContract.methods.initializeStaking(
                 stakeTokenContract.options.address
@@ -214,7 +217,7 @@ describe('HCVoting', () => {
             describe('That have expired', () => {
 
                 beforeEach(async () => {
-                    await util.skipTime(5 + 1);
+                    await util.skipTime(PROPOSAL_LIFETIME_SECS + 1);
                 });
                 
                 test('Should reject staking on proposals that have expired', async () => {
