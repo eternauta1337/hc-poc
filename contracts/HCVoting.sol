@@ -11,15 +11,20 @@ contract HCVoting is Voting {
     Token public stakeToken;
 
     // Error messages.
-    string internal constant ERROR_SENDER_DOES_NOT_HAVE_ENOUGH_FUNDS = "VOTING_SENDER_DOES_NOT_HAVE_ENOUGH_FUNDS";
-    string internal constant  ERROR_INSUFFICIENT_ALLOWANCE = "VOTING_ERROR_INSUFFICIENT_ALLOWANCE";
-    string internal constant  ERROR_SENDER_DOES_NOT_HAVE_REQUIRED_STAKE = "ERROR_SENDER_DOES_NOT_HAVE_REQUIRED_STAKE ";
-    string internal constant   ERROR_PROPOSAL_DOES_NOT_HAVE_REQUIRED_STAKE = "ERROR_PROPOSAL_DOES_NOT_HAVE_REQUIRED_STAKE ";
+    string internal constant ERROR_SENDER_DOES_NOT_HAVE_ENOUGH_FUNDS      = "VOTING_SENDER_DOES_NOT_HAVE_ENOUGH_FUNDS";
+    string internal constant ERROR_INSUFFICIENT_ALLOWANCE                 = "VOTING_ERROR_INSUFFICIENT_ALLOWANCE";
+    string internal constant ERROR_SENDER_DOES_NOT_HAVE_REQUIRED_STAKE    = "VOTING_ERROR_SENDER_DOES_NOT_HAVE_REQUIRED_STAKE ";
+    string internal constant ERROR_PROPOSAL_DOES_NOT_HAVE_REQUIRED_STAKE  = "VOTING_ERROR_PROPOSAL_DOES_NOT_HAVE_REQUIRED_STAKE ";
+    string internal constant ERROR_PROPOSAL_DOESNT_HAVE_ENOUGH_CONFIDENCE = "VOTING_ERROR_PROPOSAL_DOESNT_HAVE_ENOUGH_CONFIDENCE";
 
     // Confidence multiplier.
     // Confidence = upstake / downstake;
     // To avoid precision issues, the value is mapped to a wider range using a multiplier.
     uint256 CONFIDENCE_MULTIPLIER = 10 ** 16;
+
+    // Confidence threshold.
+    // A proposal can be boosted if it's confidence, determined by staking, is above this threshold.
+    uint256 CONFIDENCE_THRESHOLD = 4 * CONFIDENCE_MULTIPLIER;
 
     // Events.
     event UpstakeProposal(uint256 indexed _proposalId, address indexed _staker, uint256 _amount);
@@ -139,5 +144,18 @@ contract HCVoting is Voting {
         Proposal storage proposal_ = proposals[_proposalId];
         // TODO: What happens when there is no downstake (division by 0).
         _confidence = proposal_.upstake.mul(CONFIDENCE_MULTIPLIER) / proposal_.downstake;
+    }
+
+    function boostProposal(uint256 _proposalId) public {
+        require(_proposalExists(_proposalId), ERROR_PROPOSAL_DOES_NOT_EXIST);
+        require(_proposalIsOpen(_proposalId), ERROR_PROPOSAL_IS_CLOSED);
+
+        // Require confidence to be above a certain threshold.
+        uint256 confidence = getConfidence(_proposalId);
+        require(confidence >= CONFIDENCE_THRESHOLD, ERROR_PROPOSAL_DOESNT_HAVE_ENOUGH_CONFIDENCE);
+
+        // Boost the proposal.
+        Proposal storage proposal_ = proposals[_proposalId];
+        proposal_.boosted = true;
     }
 }

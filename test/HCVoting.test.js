@@ -183,7 +183,7 @@ describe('HCVoting', () => {
                 test('Should not allow someone to withdraw tokens from a proposal that has no stake', async () => {
                     expect(await reverts(
                         votingContract.methods.removeUpstakeFromProposal(0, 10).send({ ...txParams }),
-                        `ERROR_SENDER_DOES_NOT_HAVE_REQUIRED_STAKE`
+                        `VOTING_ERROR_SENDER_DOES_NOT_HAVE_REQUIRED_STAKE`
                     )).toBe(true);
                 });
 
@@ -195,7 +195,7 @@ describe('HCVoting', () => {
                     // Attempt to unstake tokens from account 1.
                     expect(await reverts(
                         votingContract.methods.removeUpstakeFromProposal(0, 10).send({ ...txParams, from: accounts[1] }),
-                        `ERROR_SENDER_DOES_NOT_HAVE_REQUIRED_STAKE`
+                        `VOTING_ERROR_SENDER_DOES_NOT_HAVE_REQUIRED_STAKE`
                     )).toBe(true);
                 });
 
@@ -212,6 +212,44 @@ describe('HCVoting', () => {
 
                 test.todo('Should not allow a staker to stake more tokens that the staker owns');
                 test.todo('Multiple upstakes/downstakes reflect properly on a proposal\'s state');
+
+                describe('When boosting proposals', () => {
+                    
+                    test('Should boost a proposal that has enough confidence', async () => {
+                        
+                        // Stake tokens.
+                        await votingContract.methods.addUpstakeToProposal(0, 4).send({ ...txParams });
+                        await votingContract.methods.addDownstakeToProposal(0, 1).send({ ...txParams });
+
+                        // Retrieve the confidence factor.
+                        const confidence = await votingContract.methods.getConfidence(0).call();
+                        expect(confidence).toBe(`${4 * 10 ** 16}`);
+
+                        // Boost the proposal.
+                        await votingContract.methods.boostProposal(0).send({ ...txParams });
+                        const proposal = await votingContract.methods.getProposal(0).call();
+                        expect(proposal.boosted).toBe(true);
+                    });
+
+                    test('Should not boost a proposal that does not have enough confidence', async () => {
+                        
+                        // Stake tokens.
+                        await votingContract.methods.addUpstakeToProposal(0, 3).send({ ...txParams });
+                        await votingContract.methods.addDownstakeToProposal(0, 1).send({ ...txParams });
+
+                        // Retrieve the confidence factor.
+                        const confidence = await votingContract.methods.getConfidence(0).call();
+                        expect(confidence).toBe(`${3 * 10 ** 16}`);
+
+                        // Boost the proposal.
+                        expect(await reverts(
+                            votingContract.methods.boostProposal(0).send({ ...txParams }),
+                            `VOTING_ERROR_PROPOSAL_DOESNT_HAVE_ENOUGH_CONFIDENCE`
+                        )).toBe(true);
+                        const proposal = await votingContract.methods.getProposal(0).call();
+                        expect(proposal.boosted).toBe(false);
+                    });
+                });
             });
 
             describe('That have expired', () => {

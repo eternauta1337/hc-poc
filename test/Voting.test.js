@@ -222,6 +222,7 @@ describe('Voting', () => {
                             // Verify that the proposal is finalized.
                             const proposal = await votingMockContract.methods.getProposal(0).call();
                             expect(proposal.finalized).toBe(true);
+                            expect(proposal.boosted).toBe(true);
                         });
                     });
                 });
