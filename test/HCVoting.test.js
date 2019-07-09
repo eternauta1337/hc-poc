@@ -71,19 +71,19 @@ describe('HCVoting', () => {
 
             test('Should reject staking on proposals that do not exist', async () => {
                 expect(await reverts(
-                    votingContract.methods.addUpstakeToProposal(9, 1).send({ ...txParams, from: accounts[0] }),
+                    votingContract.methods.stake(9, 1, true).send({ ...txParams, from: accounts[0] }),
                     `VOTING_ERROR_PROPOSAL_DOES_NOT_EXIST`
                 )).toBe(true);
                 expect(await reverts(
-                    votingContract.methods.addDownstakeToProposal(9, 1).send({ ...txParams, from: accounts[0] }),
+                    votingContract.methods.stake(9, 1, false).send({ ...txParams, from: accounts[0] }),
                     `VOTING_ERROR_PROPOSAL_DOES_NOT_EXIST`
                 )).toBe(true);
                 expect(await reverts(
-                    votingContract.methods.removeUpstakeFromProposal(9, 1).send({ ...txParams, from: accounts[0] }),
+                    votingContract.methods.unstake(9, 1, true).send({ ...txParams, from: accounts[0] }),
                     `VOTING_ERROR_PROPOSAL_DOES_NOT_EXIST`
                 )).toBe(true);
                 expect(await reverts(
-                    votingContract.methods.removeDownstakeFromProposal(9, 1).send({ ...txParams, from: accounts[0] }),
+                    votingContract.methods.unstake(9, 1, false).send({ ...txParams, from: accounts[0] }),
                     `VOTING_ERROR_PROPOSAL_DOES_NOT_EXIST`
                 )).toBe(true);
             });
@@ -106,8 +106,8 @@ describe('HCVoting', () => {
                 test('Should allow someone to stake on a proposal', async () => {
                     
                     // Stake tokens.
-                    const upstakeReceipt = await votingContract.methods.addUpstakeToProposal(0, 10).send({ ...txParams });
-                    const downstakeReceipt = await votingContract.methods.addDownstakeToProposal(0, 5).send({ ...txParams });
+                    const upstakeReceipt = await votingContract.methods.stake(0, 10, true).send({ ...txParams });
+                    const downstakeReceipt = await votingContract.methods.stake(0, 5, false).send({ ...txParams });
 
                     // Verify that the proper events were triggered.
                     let event = upstakeReceipt.events.UpstakeProposal;
@@ -122,8 +122,8 @@ describe('HCVoting', () => {
                     expect(event.returnValues._amount).toBe(`5`);
 
                     // Stake some more.
-                    await votingContract.methods.addUpstakeToProposal(0, 5).send({ ...txParams });
-                    await votingContract.methods.addDownstakeToProposal(0, 5).send({ ...txParams });
+                    await votingContract.methods.stake(0, 5, true).send({ ...txParams });
+                    await votingContract.methods.stake(0, 5, false).send({ ...txParams });
 
                     // Verify that the proposal received the stakes.
                     const proposal = await votingContract.methods.getProposal(0).call();
@@ -148,8 +148,8 @@ describe('HCVoting', () => {
                 test('Should allow someone to remove stake from a proposal', async () => {
                     
                     // Stake tokens.
-                    await votingContract.methods.addUpstakeToProposal(0, 10).send({ ...txParams });
-                    await votingContract.methods.addDownstakeToProposal(0, 5).send({ ...txParams });
+                    await votingContract.methods.stake(0, 10, true).send({ ...txParams });
+                    await votingContract.methods.stake(0, 5, false).send({ ...txParams });
                     
                     // Verify owner stake token balance decrease.
                     let stakerBalance = await stakeTokenContract.methods.balanceOf(accounts[0]).call();
@@ -160,8 +160,8 @@ describe('HCVoting', () => {
                     expect(votingBalance).toBe(`15`);
 
                     // Retrieve stake.
-                    const unUpstakeReceipt = await votingContract.methods.removeUpstakeFromProposal(0, 10).send({ ...txParams });
-                    const unDownstakeReceipt = await votingContract.methods.removeDownstakeFromProposal(0, 5).send({ ...txParams });
+                    const unUpstakeReceipt = await votingContract.methods.unstake(0, 10, true).send({ ...txParams });
+                    const unDownstakeReceipt = await votingContract.methods.unstake(0, 5, false).send({ ...txParams });
 
                     // Verify that the proper events were triggered.
                     let event = unUpstakeReceipt.events.WithdrawUpstake;
@@ -186,7 +186,7 @@ describe('HCVoting', () => {
 
                 test('Should not allow someone to withdraw tokens from a proposal that has no stake', async () => {
                     expect(await reverts(
-                        votingContract.methods.removeUpstakeFromProposal(0, 10).send({ ...txParams }),
+                        votingContract.methods.unstake(0, 10, true).send({ ...txParams }),
                         `VOTING_ERROR_SENDER_DOES_NOT_HAVE_REQUIRED_STAKE`
                     )).toBe(true);
                 });
@@ -194,11 +194,11 @@ describe('HCVoting', () => {
                 test('Should not allow someone to withdraw tokens that were not staked by the staker', async () => {
 
                     // Stake tokens from account 0.
-                    await votingContract.methods.addUpstakeToProposal(0, 10).send({ ...txParams });
+                    await votingContract.methods.stake(0, 10, true).send({ ...txParams });
 
                     // Attempt to unstake tokens from account 1.
                     expect(await reverts(
-                        votingContract.methods.removeUpstakeFromProposal(0, 10).send({ ...txParams, from: accounts[1] }),
+                        votingContract.methods.unstake(0, 10, true).send({ ...txParams, from: accounts[1] }),
                         `VOTING_ERROR_SENDER_DOES_NOT_HAVE_REQUIRED_STAKE`
                     )).toBe(true);
                 });
@@ -206,8 +206,8 @@ describe('HCVoting', () => {
                 test('Can retrieve a proposals confidence factor', async () => {
                     
                     // Stake tokens.
-                    await votingContract.methods.addUpstakeToProposal(0, 10).send({ ...txParams });
-                    await votingContract.methods.addDownstakeToProposal(0, 5).send({ ...txParams });
+                    await votingContract.methods.stake(0, 10, true).send({ ...txParams });
+                    await votingContract.methods.stake(0, 5, false).send({ ...txParams });
 
                     // Retrieve the confidence factor.
                     const confidence = await votingContract.methods.getConfidence(0).call();
@@ -235,8 +235,8 @@ describe('HCVoting', () => {
                         beforeEach(async () => {
 
                             // Perform some stakes on the proposal.
-                            await votingContract.methods.addUpstakeToProposal(0, 10).send({ ...txParams, from: accounts[0] });
-                            await votingContract.methods.addDownstakeToProposal(0, 5).send({ ...txParams, from: accounts[1] });
+                            await votingContract.methods.stake(0, 10, true).send({ ...txParams, from: accounts[0] });
+                            await votingContract.methods.stake(0, 5, false).send({ ...txParams, from: accounts[1] });
                         });
 
                         test('Should allow stakers to withdraw their stakes when a proposal is finalized (with absolute majority)', async () => {
@@ -260,8 +260,8 @@ describe('HCVoting', () => {
                             expect(proposal.finalized).toBe(true);
 
                             // Have stakers withdraw their tokens.
-                            await votingContract.methods.removeUpstakeFromProposal(0, 10).send({ ...txParams, from: accounts[0] });
-                            await votingContract.methods.removeDownstakeFromProposal(0, 5).send({ ...txParams, from: accounts[1] });
+                            await votingContract.methods.unstake(0, 10, true).send({ ...txParams, from: accounts[0] });
+                            await votingContract.methods.unstake(0, 5, false).send({ ...txParams, from: accounts[1] });
 
                             // Verify that the stakers retrieved their tokens.
                             expect(await stakeTokenContract.methods.balanceOf(accounts[0]).call()).toBe(`1000`);
@@ -274,9 +274,9 @@ describe('HCVoting', () => {
                         beforeEach(async () => {
 
                             // Perform some stakes on the proposal.
-                            await votingContract.methods.addUpstakeToProposal(0, 200).send({ ...txParams, from: accounts[0] });
-                            await votingContract.methods.addUpstakeToProposal(0, 200).send({ ...txParams, from: accounts[1] });
-                            await votingContract.methods.addDownstakeToProposal(0, 100).send({ ...txParams, from: accounts[2] });
+                            await votingContract.methods.stake(0, 200, true).send({ ...txParams, from: accounts[0] });
+                            await votingContract.methods.stake(0, 200, true).send({ ...txParams, from: accounts[1] });
+                            await votingContract.methods.stake(0, 100, false).send({ ...txParams, from: accounts[2] });
                         });
                         
                         test('Should divide stakes pro-rata when a boosted proposal is finalized', async () => {
@@ -285,10 +285,6 @@ describe('HCVoting', () => {
                             await votingContract.methods.vote(0, true ).send({ ...txParams, from: accounts[0] });
                             await votingContract.methods.vote(0, true ).send({ ...txParams, from: accounts[1] });
                             await votingContract.methods.vote(0, false).send({ ...txParams, from: accounts[2] });
-
-                            // Retrieve the confidence factor.
-                            const confidence = await votingContract.methods.getConfidence(0).call();
-                            expect(confidence).toBe(`${4 * 10 ** 16}`);
 
                             // Boost the proposal.
                             await votingContract.methods.boostProposal(0).send({ ...txParams });
@@ -321,7 +317,7 @@ describe('HCVoting', () => {
                             expect(await stakeTokenContract.methods.balanceOf(accounts[2]).call()).toBe(`900`);
                         });
 
-                        test.only('Should not allow to withdraw rewards from proposals that are not finalized', async () => {
+                        test('Should not allow to withdraw rewards from proposals that are not finalized', async () => {
                             expect(await reverts(
                                 votingContract.methods.withdrawReward(0).send({ ...txParams, from: accounts[0] }),
                                 `VOTING_ERROR_PROPOSAL_IS_NOT_FINALIZED`
@@ -337,11 +333,11 @@ describe('HCVoting', () => {
                         
                         test('Should reject staking on proposals that have expired', async () => {
                             expect(await reverts(
-                                votingContract.methods.addUpstakeToProposal(0, 10).send({ ...txParams }),
+                                votingContract.methods.stake(0, 10, true).send({ ...txParams }),
                                 `VOTING_ERROR_PROPOSAL_IS_CLOSED`
                             )).toBe(true);
                             expect(await reverts(
-                                votingContract.methods.addDownstakeToProposal(0, 10).send({ ...txParams }),
+                                votingContract.methods.stake(0, 10, false).send({ ...txParams }),
                                 `VOTING_ERROR_PROPOSAL_IS_CLOSED`
                             )).toBe(true);
                         });
@@ -357,8 +353,8 @@ describe('HCVoting', () => {
                     test('Should boost a proposal that has enough confidence', async () => {
                         
                         // Stake tokens.
-                        await votingContract.methods.addUpstakeToProposal(0, 4).send({ ...txParams });
-                        await votingContract.methods.addDownstakeToProposal(0, 1).send({ ...txParams });
+                        await votingContract.methods.stake(0, 4, true).send({ ...txParams });
+                        await votingContract.methods.stake(0, 1, false).send({ ...txParams });
 
                         // Retrieve the confidence factor.
                         const confidence = await votingContract.methods.getConfidence(0).call();
@@ -373,8 +369,8 @@ describe('HCVoting', () => {
                     test('Should not boost a proposal that does not have enough confidence', async () => {
                         
                         // Stake tokens.
-                        await votingContract.methods.addUpstakeToProposal(0, 3).send({ ...txParams });
-                        await votingContract.methods.addDownstakeToProposal(0, 1).send({ ...txParams });
+                        await votingContract.methods.stake(0, 3, true).send({ ...txParams });
+                        await votingContract.methods.stake(0, 1, false).send({ ...txParams });
 
                         // Retrieve the confidence factor.
                         const confidence = await votingContract.methods.getConfidence(0).call();

@@ -162,7 +162,7 @@ contract Voting {
 
         // Standard proposal resolution (absolute majority).
         if(proposal_.boosted) {
-            _verifyFinalizationWithRelativemajority(proposal_);
+            _verifyFinalizationWithRelativeMajority(proposal_);
         }
         else {
             _verifyFinalizationWithAbsoluteMajority(proposal_);
@@ -179,7 +179,7 @@ contract Voting {
         require(yeaPct > supportPct * PCT_MULTIPLIER, ERROR_NOT_ENOUGH_ABSOLUTE_SUPPORT);
     }
 
-    function _verifyFinalizationWithRelativemajority(Proposal storage proposal_) internal view {
+    function _verifyFinalizationWithRelativeMajority(Proposal storage proposal_) internal view {
         uint256 totalVoted = proposal_.yea.add(proposal_.nay);
         uint256 yeaPct = _votesToPct(proposal_.yea, totalVoted);
         require(yeaPct > supportPct * PCT_MULTIPLIER, ERROR_NOT_ENOUGH_RELATIVE_SUPPORT);
@@ -189,7 +189,6 @@ contract Voting {
      * Internal functions.
      */
 
-    // TODO: Make internal!
     function _boostProposal(uint256 _proposalId) internal {
         require(_proposalExists(_proposalId), ERROR_PROPOSAL_DOES_NOT_EXIST);
         require(_proposalIsOpen(_proposalId), ERROR_PROPOSAL_IS_CLOSED);

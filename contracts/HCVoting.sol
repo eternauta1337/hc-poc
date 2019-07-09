@@ -45,7 +45,7 @@ contract HCVoting is Voting {
         stakeToken = _stakeToken;
     }
 
-    function addUpstakeToProposal(uint256 _proposalId, uint256 _amount) public {
+    function stake(uint256 _proposalId, uint256 _amount, bool _supports) public {
         require(_proposalExists(_proposalId), ERROR_PROPOSAL_DOES_NOT_EXIST);
         require(_proposalIsOpen(_proposalId), ERROR_PROPOSAL_IS_CLOSED);
         require(stakeToken.balanceOf(msg.sender) >= _amount, ERROR_SENDER_DOES_NOT_HAVE_ENOUGH_FUNDS);
@@ -53,88 +53,52 @@ contract HCVoting is Voting {
 
         Proposal storage proposal_ = proposals[_proposalId];
 
-        // Update the proposal's upstake.
-        proposal_.upstake = proposal_.upstake.add(_amount);
+        // Update the proposal's stake.
+        if(_supports) proposal_.upstake = proposal_.upstake.add(_amount);
+        else proposal_.downstake = proposal_.downstake.add(_amount);
 
-        // Update the staker's upstake amount.
-        proposal_.upstakes[msg.sender] = proposal_.upstakes[msg.sender].add(_amount);
-
-        // Extract the tokens from the sender and store them in this contract.
-        // Note: This assumes that the sender has provided the required allowance to this contract.
-        stakeToken.transferFrom(msg.sender, address(this), _amount);
-
-        emit UpstakeProposal(_proposalId, msg.sender, _amount);
-    }
-
-    function addDownstakeToProposal(uint256 _proposalId, uint256 _amount) public {
-        require(_proposalExists(_proposalId), ERROR_PROPOSAL_DOES_NOT_EXIST);
-        require(_proposalIsOpen(_proposalId), ERROR_PROPOSAL_IS_CLOSED);
-        require(stakeToken.balanceOf(msg.sender) >= _amount, ERROR_SENDER_DOES_NOT_HAVE_ENOUGH_FUNDS);
-        require(stakeToken.allowance(msg.sender, address(this)) >= _amount, ERROR_INSUFFICIENT_ALLOWANCE);
-
-        Proposal storage proposal_ = proposals[_proposalId];
-
-        // Update the proposal's downstake.
-        proposal_.downstake = proposal_.downstake.add(_amount);
-
-        // Update the staker's downstake amount.
-        proposal_.downstakes[msg.sender] = proposal_.downstakes[msg.sender].add(_amount);
+        // Update the staker's stake amount.
+        if(_supports) proposal_.upstakes[msg.sender] = proposal_.upstakes[msg.sender].add(_amount);
+        else proposal_.downstakes[msg.sender] = proposal_.downstakes[msg.sender].add(_amount);
 
         // Extract the tokens from the sender and store them in this contract.
         // Note: This assumes that the sender has provided the required allowance to this contract.
         stakeToken.transferFrom(msg.sender, address(this), _amount);
 
-        emit DownstakeProposal(_proposalId, msg.sender, _amount);
+        // Emit corresponding event.
+        if(_supports) emit UpstakeProposal(_proposalId, msg.sender, _amount);
+        else emit DownstakeProposal(_proposalId, msg.sender, _amount);
     }
 
-    function removeUpstakeFromProposal(uint256 _proposalId, uint256 _amount) public {
+    function unstake(uint256 _proposalId, uint256 _amount, bool _supports) public {
         require(_proposalExists(_proposalId), ERROR_PROPOSAL_DOES_NOT_EXIST);
         require(_proposalIsOpen(_proposalId) || !_proposalIsBoosted(_proposalId), ERROR_PROPOSAL_IS_CLOSED);
 
         Proposal storage proposal_ = proposals[_proposalId];
 
-        // Verify that the sender holds the required upstake to be removed.
-        require(proposal_.upstakes[msg.sender] >= _amount, ERROR_SENDER_DOES_NOT_HAVE_REQUIRED_STAKE);
+        // Verify that the sender holds the required stake to be removed.
+        if(_supports) require(proposal_.upstakes[msg.sender] >= _amount, ERROR_SENDER_DOES_NOT_HAVE_REQUIRED_STAKE);
+        else require(proposal_.downstakes[msg.sender] >= _amount, ERROR_SENDER_DOES_NOT_HAVE_REQUIRED_STAKE);
         
-        // Verify that the proposal has the required upstake to be removed.
-        require(proposal_.upstake >= _amount, ERROR_PROPOSAL_DOES_NOT_HAVE_REQUIRED_STAKE);
+        // Verify that the proposal has the required stake to be removed.
+        if(_supports) require(proposal_.upstake >= _amount, ERROR_PROPOSAL_DOES_NOT_HAVE_REQUIRED_STAKE);
+        else require(proposal_.downstake >= _amount, ERROR_PROPOSAL_DOES_NOT_HAVE_REQUIRED_STAKE);
 
-        // Remove the upstake from the proposal.
-        proposal_.upstake = proposal_.upstake.sub(_amount);
+        // Remove the stake from the proposal.
+        if(_supports) proposal_.upstake = proposal_.upstake.sub(_amount);
+        else proposal_.downstake = proposal_.downstake.sub(_amount);
 
-        // Remove the upstake from the sender.
-        proposal_.upstakes[msg.sender] = proposal_.upstakes[msg.sender].sub(_amount);
+        // Remove the stake from the sender.
+        if(_supports) proposal_.upstakes[msg.sender] = proposal_.upstakes[msg.sender].sub(_amount);
+        else proposal_.downstakes[msg.sender] = proposal_.downstakes[msg.sender].sub(_amount);
 
         // Return the tokens to the sender.
         require(stakeToken.balanceOf(address(this)) >= _amount, ERROR_VOTING_DOES_NOT_HAVE_ENOUGH_FUNDS);
         stakeToken.transfer(msg.sender, _amount);
 
-        emit WithdrawUpstake(_proposalId, msg.sender, _amount);
-    }
-
-    function removeDownstakeFromProposal(uint256 _proposalId, uint256 _amount) public {
-        require(_proposalExists(_proposalId), ERROR_PROPOSAL_DOES_NOT_EXIST);
-        require(_proposalIsOpen(_proposalId) || !_proposalIsBoosted(_proposalId), ERROR_PROPOSAL_IS_CLOSED);
-
-        Proposal storage proposal_ = proposals[_proposalId];
-
-        // Verify that the sender holds the required downstake to be removed.
-        require(proposal_.downstakes[msg.sender] >= _amount, ERROR_SENDER_DOES_NOT_HAVE_REQUIRED_STAKE);
-        
-        // Verify that the proposal has the required downstake to be removed.
-        require(proposal_.downstake >= _amount, ERROR_PROPOSAL_DOES_NOT_HAVE_REQUIRED_STAKE);
-
-        // Remove the upstake from the proposal.
-        proposal_.downstake = proposal_.downstake.sub(_amount);
-
-        // Remove the upstake from the sender.
-        proposal_.downstakes[msg.sender] = proposal_.downstakes[msg.sender].sub(_amount);
-
-        // Return the tokens to the sender.
-        require(stakeToken.balanceOf(address(this)) >= _amount, ERROR_VOTING_DOES_NOT_HAVE_ENOUGH_FUNDS);
-        stakeToken.transfer(msg.sender, _amount);
-
-        emit WithdrawDownstake(_proposalId, msg.sender, _amount);
+        // Emit corresponding event.
+        if(_supports) emit WithdrawUpstake(_proposalId, msg.sender, _amount);
+        else emit WithdrawDownstake(_proposalId, msg.sender, _amount);
     }
 
     function getUpstake(uint256 _proposalId, address _staker) public view returns (uint256) {
