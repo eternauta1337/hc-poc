@@ -156,7 +156,7 @@ contract Voting {
 
     function finalizeProposal(uint256 _proposalId) public {
         require(_proposalExists(_proposalId), ERROR_PROPOSAL_DOES_NOT_EXIST);
-        require(_proposalIsNotFinalized(_proposalId), ERROR_PROPOSAL_IS_CLOSED);
+        require(!_proposalIsFinalized(_proposalId), ERROR_PROPOSAL_IS_CLOSED);
         
         Proposal storage proposal_ = proposals[_proposalId];
 
@@ -212,17 +212,22 @@ contract Voting {
 
     function _proposalIsOpen(uint256 _proposalId) internal view returns (bool) {
         return 
-            _proposalIsNotFinalized(_proposalId) && 
-            _proposalIsNotExpired(_proposalId);
+            !_proposalIsFinalized(_proposalId) && 
+            !_proposalIsExpired(_proposalId);
     }
 
-    function _proposalIsNotFinalized(uint256 _proposalId) internal view returns (bool) {
+    function _proposalIsFinalized(uint256 _proposalId) internal view returns (bool) {
         Proposal storage proposal_ = proposals[_proposalId];
-        return !proposal_.finalized;
+        return proposal_.finalized;
     }
 
-    function _proposalIsNotExpired(uint256 _proposalId) internal view returns (bool) {
+    function _proposalIsExpired(uint256 _proposalId) internal view returns (bool) {
         Proposal storage proposal_ = proposals[_proposalId];
-        return now < proposal_.startDate.add(proposalLifeTime);
+        return now >= proposal_.startDate.add(proposalLifeTime);
+    }
+
+    function _proposalIsBoosted(uint256 _proposalId) internal view returns (bool) {
+        Proposal storage proposal_ = proposals[_proposalId];
+        return proposal_.boosted;
     }
 }

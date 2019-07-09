@@ -95,10 +95,12 @@ describe('HCVoting', () => {
                     // Mint some stake tokens.
                     await stakeTokenContract.methods.mint(accounts[0], 1000).send({ ...txParams });
                     await stakeTokenContract.methods.mint(accounts[1], 1000).send({ ...txParams });
+                    await stakeTokenContract.methods.mint(accounts[2], 1000).send({ ...txParams });
 
                     // Increase allowance to the voting contract.
                     await stakeTokenContract.methods.approve(votingContract.options.address, `${10 ** 18}`).send({ ...txParams, from: accounts[0] });
                     await stakeTokenContract.methods.approve(votingContract.options.address, `${10 ** 18}`).send({ ...txParams, from: accounts[1] });
+                    await stakeTokenContract.methods.approve(votingContract.options.address, `${10 ** 18}`).send({ ...txParams, from: accounts[2] });
                 });
                 
                 test('Should allow someone to stake on a proposal', async () => {
@@ -218,11 +220,7 @@ describe('HCVoting', () => {
                 describe('When finalizing proposals', () => {
 
                     beforeEach(async () => {
-
-                        // Perform some stakes on the proposal.
-                        await votingContract.methods.addUpstakeToProposal(0, 10).send({ ...txParams, from: accounts[0] });
-                        await votingContract.methods.addDownstakeToProposal(0, 5).send({ ...txParams, from: accounts[1] });
-
+                        
                         // Mint some vote tokens.
                         await voteTokenContract.methods.mint(accounts[0], 1).send({ ...txParams });
                         await voteTokenContract.methods.mint(accounts[1], 1).send({ ...txParams });
@@ -232,33 +230,103 @@ describe('HCVoting', () => {
                         await voteTokenContract.methods.mint(accounts[5], 1).send({ ...txParams });
                     });
 
-                    test('Should allow stakers to withdraw their stakes when a proposal is finalized (with absolute majority)', async () => {
+                    describe('With absolute majority', () => {
                         
-                        // Cast votes with enough support.
-                        await votingContract.methods.vote(0, true ).send({ ...txParams, from: accounts[0] });
-                        await votingContract.methods.vote(0, true ).send({ ...txParams, from: accounts[1] });
-                        await votingContract.methods.vote(0, true ).send({ ...txParams, from: accounts[2] });
-                        await votingContract.methods.vote(0, true ).send({ ...txParams, from: accounts[3] });
-                        await votingContract.methods.vote(0, false).send({ ...txParams, from: accounts[4] });
-                        await votingContract.methods.vote(0, false).send({ ...txParams, from: accounts[5] });
+                        beforeEach(async () => {
 
-                        // Finalize the proposal.
-                        const proposalFinalizationReceipt = await votingContract.methods.finalizeProposal(0).send({ ...txParams });
-                        expect(proposalFinalizationReceipt.events.FinalizeProposal).not.toBeNull();
-                        const args = proposalFinalizationReceipt.events.FinalizeProposal.returnValues;
-                        expect(args._proposalId).toBe(`0`);
+                            // Perform some stakes on the proposal.
+                            await votingContract.methods.addUpstakeToProposal(0, 10).send({ ...txParams, from: accounts[0] });
+                            await votingContract.methods.addDownstakeToProposal(0, 5).send({ ...txParams, from: accounts[1] });
+                        });
 
-                        // Verify that the proposal is finalized.
-                        const proposal = await votingContract.methods.getProposal(0).call();
-                        expect(proposal.finalized).toBe(true);
+                        test('Should allow stakers to withdraw their stakes when a proposal is finalized (with absolute majority)', async () => {
+                            
+                            // Cast votes with enough support.
+                            await votingContract.methods.vote(0, true ).send({ ...txParams, from: accounts[0] });
+                            await votingContract.methods.vote(0, true ).send({ ...txParams, from: accounts[1] });
+                            await votingContract.methods.vote(0, true ).send({ ...txParams, from: accounts[2] });
+                            await votingContract.methods.vote(0, true ).send({ ...txParams, from: accounts[3] });
+                            await votingContract.methods.vote(0, false).send({ ...txParams, from: accounts[4] });
+                            await votingContract.methods.vote(0, false).send({ ...txParams, from: accounts[5] });
 
-                        // Have stakers withdraw their tokens.
-                        await votingContract.methods.removeUpstakeFromProposal(0, 10).send({ ...txParams, from: accounts[0] });
-                        await votingContract.methods.removeDownstakeFromProposal(0, 5).send({ ...txParams, from: accounts[1] });
+                            // Finalize the proposal.
+                            const proposalFinalizationReceipt = await votingContract.methods.finalizeProposal(0).send({ ...txParams });
+                            expect(proposalFinalizationReceipt.events.FinalizeProposal).not.toBeNull();
+                            const args = proposalFinalizationReceipt.events.FinalizeProposal.returnValues;
+                            expect(args._proposalId).toBe(`0`);
 
-                        // Verify that the stakers retrieved their tokens.
-                        expect(await stakeTokenContract.methods.balanceOf(accounts[0]).call()).toBe(`1000`);
-                        expect(await stakeTokenContract.methods.balanceOf(accounts[1]).call()).toBe(`1000`);
+                            // Verify that the proposal is finalized.
+                            const proposal = await votingContract.methods.getProposal(0).call();
+                            expect(proposal.finalized).toBe(true);
+
+                            // Have stakers withdraw their tokens.
+                            await votingContract.methods.removeUpstakeFromProposal(0, 10).send({ ...txParams, from: accounts[0] });
+                            await votingContract.methods.removeDownstakeFromProposal(0, 5).send({ ...txParams, from: accounts[1] });
+
+                            // Verify that the stakers retrieved their tokens.
+                            expect(await stakeTokenContract.methods.balanceOf(accounts[0]).call()).toBe(`1000`);
+                            expect(await stakeTokenContract.methods.balanceOf(accounts[1]).call()).toBe(`1000`);
+                        });
+                    });
+
+                    describe('With relative majority (boosted)', () => {
+
+                        beforeEach(async () => {
+
+                            // Perform some stakes on the proposal.
+                            await votingContract.methods.addUpstakeToProposal(0, 200).send({ ...txParams, from: accounts[0] });
+                            await votingContract.methods.addUpstakeToProposal(0, 200).send({ ...txParams, from: accounts[1] });
+                            await votingContract.methods.addDownstakeToProposal(0, 100).send({ ...txParams, from: accounts[2] });
+                        });
+                        
+                        test('Should divide stakes pro-rata when a boosted proposal is finalized', async () => {
+                            
+                            // Cast votes without majority support.
+                            await votingContract.methods.vote(0, true ).send({ ...txParams, from: accounts[0] });
+                            await votingContract.methods.vote(0, true ).send({ ...txParams, from: accounts[1] });
+                            await votingContract.methods.vote(0, false).send({ ...txParams, from: accounts[2] });
+
+                            // Retrieve the confidence factor.
+                            const confidence = await votingContract.methods.getConfidence(0).call();
+                            expect(confidence).toBe(`${4 * 10 ** 16}`);
+
+                            // Boost the proposal.
+                            await votingContract.methods.boostProposal(0).send({ ...txParams });
+                            let proposal = await votingContract.methods.getProposal(0).call();
+                            expect(proposal.boosted).toBe(true);
+
+                            // Finalize the proposal.
+                            const proposalFinalizationReceipt = await votingContract.methods.finalizeProposal(0).send({ ...txParams });
+                            expect(proposalFinalizationReceipt.events.FinalizeProposal).not.toBeNull();
+                            const args = proposalFinalizationReceipt.events.FinalizeProposal.returnValues;
+                            expect(args._proposalId).toBe(`0`);
+
+                            // Verify that the proposal is finalized.
+                            proposal = await votingContract.methods.getProposal(0).call();
+                            expect(proposal.finalized).toBe(true);
+
+                            // Have winning stakers retrieve their tokens.
+                            await votingContract.methods.withdrawReward(0).send({ ...txParams, from: accounts[0] });
+                            await votingContract.methods.withdrawReward(0).send({ ...txParams, from: accounts[1] });
+
+                            // Have losing stakers try to retrieve their tokens (expected to fail).
+                            expect(await reverts(
+                                votingContract.methods.withdrawReward(0).send({ ...txParams, from: accounts[2] }),
+                                `VOTING_ERROR_NO_WINNING_STAKE`
+                            )).toBe(true);
+
+                            // Verify that the stakers that predicted the outcome of the proposals received their reward.
+                            expect(await stakeTokenContract.methods.balanceOf(accounts[0]).call()).toBe(`1050`);
+                            expect(await stakeTokenContract.methods.balanceOf(accounts[1]).call()).toBe(`1050`);
+                            expect(await stakeTokenContract.methods.balanceOf(accounts[2]).call()).toBe(`900`);
+                        });
+
+                        test.only('Should not allow to withdraw rewards from proposals that are not finalized', async () => {
+                            expect(await reverts(
+                                votingContract.methods.withdrawReward(0).send({ ...txParams, from: accounts[0] }),
+                                `VOTING_ERROR_PROPOSAL_IS_NOT_FINALIZED`
+                            )).toBe(true);
+                        });
                     });
 
                     describe('That have expired', () => {

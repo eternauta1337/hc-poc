@@ -16,11 +16,19 @@ contract HCVoting is Voting {
     string internal constant ERROR_SENDER_DOES_NOT_HAVE_REQUIRED_STAKE    = "VOTING_ERROR_SENDER_DOES_NOT_HAVE_REQUIRED_STAKE ";
     string internal constant ERROR_PROPOSAL_DOES_NOT_HAVE_REQUIRED_STAKE  = "VOTING_ERROR_PROPOSAL_DOES_NOT_HAVE_REQUIRED_STAKE ";
     string internal constant ERROR_PROPOSAL_DOESNT_HAVE_ENOUGH_CONFIDENCE = "VOTING_ERROR_PROPOSAL_DOESNT_HAVE_ENOUGH_CONFIDENCE";
+    string internal constant ERROR_PROPOSAL_IS_NOT_FINALIZED              = "VOTING_ERROR_PROPOSAL_IS_NOT_FINALIZED";
+    string internal constant ERROR_PROPOSAL_IS_NOT_BOOSTED                = "VOTING_ERROR_PROPOSAL_IS_NOT_BOOSTED";
+    string internal constant ERROR_NO_WINNING_STAKE                       = "VOTING_ERROR_NO_WINNING_STAKE";
+    string internal constant ERROR_VOTING_DOES_NOT_HAVE_ENOUGH_FUNDS      = "VOTING_ERROR_VOTING_DOES_NOT_HAVE_ENOUGH_FUNDS";
 
     // Confidence multiplier.
     // Confidence = upstake / downstake;
     // To avoid precision issues, the value is mapped to a wider range using a multiplier.
     uint256 CONFIDENCE_MULTIPLIER = 10 ** 16;
+
+    // Reward multiplier.
+    // To avoid precision issues, the value is mapped to a wider range using a multiplier.
+    uint256 REWARD_MULTIPLIER = 10 ** 16;
 
     // Confidence threshold.
     // A proposal can be boosted if it's confidence, determined by staking, is above this threshold.
@@ -81,6 +89,7 @@ contract HCVoting is Voting {
 
     function removeUpstakeFromProposal(uint256 _proposalId, uint256 _amount) public {
         require(_proposalExists(_proposalId), ERROR_PROPOSAL_DOES_NOT_EXIST);
+        require(_proposalIsOpen(_proposalId) || !_proposalIsBoosted(_proposalId), ERROR_PROPOSAL_IS_CLOSED);
 
         Proposal storage proposal_ = proposals[_proposalId];
 
@@ -97,6 +106,7 @@ contract HCVoting is Voting {
         proposal_.upstakes[msg.sender] = proposal_.upstakes[msg.sender].sub(_amount);
 
         // Return the tokens to the sender.
+        require(stakeToken.balanceOf(address(this)) >= _amount, ERROR_VOTING_DOES_NOT_HAVE_ENOUGH_FUNDS);
         stakeToken.transfer(msg.sender, _amount);
 
         emit WithdrawUpstake(_proposalId, msg.sender, _amount);
@@ -104,6 +114,7 @@ contract HCVoting is Voting {
 
     function removeDownstakeFromProposal(uint256 _proposalId, uint256 _amount) public {
         require(_proposalExists(_proposalId), ERROR_PROPOSAL_DOES_NOT_EXIST);
+        require(_proposalIsOpen(_proposalId) || !_proposalIsBoosted(_proposalId), ERROR_PROPOSAL_IS_CLOSED);
 
         Proposal storage proposal_ = proposals[_proposalId];
 
@@ -120,6 +131,7 @@ contract HCVoting is Voting {
         proposal_.downstakes[msg.sender] = proposal_.downstakes[msg.sender].sub(_amount);
 
         // Return the tokens to the sender.
+        require(stakeToken.balanceOf(address(this)) >= _amount, ERROR_VOTING_DOES_NOT_HAVE_ENOUGH_FUNDS);
         stakeToken.transfer(msg.sender, _amount);
 
         emit WithdrawDownstake(_proposalId, msg.sender, _amount);
@@ -155,5 +167,30 @@ contract HCVoting is Voting {
         // Boost the proposal.
         Proposal storage proposal_ = proposals[_proposalId];
         proposal_.boosted = true;
+    }
+
+    function withdrawReward(uint256 _proposalId) public {
+        require(_proposalExists(_proposalId), ERROR_PROPOSAL_DOES_NOT_EXIST);
+        require(_proposalIsFinalized(_proposalId), ERROR_PROPOSAL_IS_NOT_FINALIZED);
+        require(_proposalIsBoosted(_proposalId), ERROR_PROPOSAL_IS_NOT_BOOSTED);
+
+        // Get proposal outcome.
+        Proposal storage proposal_ = proposals[_proposalId];
+        bool supported = proposal_.yea > proposal_.nay;
+
+        // Retrieve the sender's winning stake.
+        uint256 winningStake = supported ? proposal_.upstakes[msg.sender] : proposal_.downstakes[msg.sender];
+        require(winningStake > 0, ERROR_NO_WINNING_STAKE);
+
+        // Calculate the sender's reward.
+        uint256 totalWinningStake = supported ? proposal_.upstake : proposal_.downstake;
+        uint256 totalLosingStake = supported ? proposal_.downstake : proposal_.upstake;
+        uint256 sendersWinningRatio = winningStake.mul(REWARD_MULTIPLIER) / totalWinningStake;
+        uint256 reward = sendersWinningRatio.mul(totalLosingStake) / REWARD_MULTIPLIER;
+        uint256 total = winningStake.add(reward);
+
+        // Transfer the tokens to the winner.
+        require(stakeToken.balanceOf(address(this)) >= total, ERROR_VOTING_DOES_NOT_HAVE_ENOUGH_FUNDS);
+        stakeToken.transfer(msg.sender, total);
     }
 }

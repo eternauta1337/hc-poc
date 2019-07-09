@@ -1,7 +1,7 @@
 const getWeb3 = require('../scripts/getWeb3.js');
 const deploy = require('../scripts/deploy.js');
 
-describe('Token', () => {
+describe.skip('Token', () => {
     const web3 = getWeb3('localhost');
 
     let accounts;
