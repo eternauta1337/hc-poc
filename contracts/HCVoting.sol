@@ -21,18 +21,9 @@ contract HCVoting is Voting {
     string internal constant ERROR_NO_WINNING_STAKE                       = "VOTING_ERROR_NO_WINNING_STAKE";
     string internal constant ERROR_VOTING_DOES_NOT_HAVE_ENOUGH_FUNDS      = "VOTING_ERROR_VOTING_DOES_NOT_HAVE_ENOUGH_FUNDS";
 
-    // Confidence multiplier.
-    // Confidence = upstake / downstake;
-    // To avoid precision issues, the value is mapped to a wider range using a multiplier.
-    uint256 CONFIDENCE_MULTIPLIER = 10 ** 16;
-
-    // Reward multiplier.
-    // To avoid precision issues, the value is mapped to a wider range using a multiplier.
-    uint256 REWARD_MULTIPLIER = 10 ** 16;
-
     // Confidence threshold.
     // A proposal can be boosted if it's confidence, determined by staking, is above this threshold.
-    uint256 CONFIDENCE_THRESHOLD = 4 * CONFIDENCE_MULTIPLIER;
+    uint256 CONFIDENCE_THRESHOLD = uint256(4).mul(PRECISION_MULTIPLIER);
 
     // Events.
     event UpstakeProposal(uint256 indexed _proposalId, address indexed _staker, uint256 _amount);
@@ -117,7 +108,7 @@ contract HCVoting is Voting {
         require(_proposalExists(_proposalId), ERROR_PROPOSAL_DOES_NOT_EXIST);
         Proposal storage proposal_ = proposals[_proposalId];
         // TODO: What happens when there is no downstake (division by 0).
-        _confidence = proposal_.upstake.mul(CONFIDENCE_MULTIPLIER) / proposal_.downstake;
+        _confidence = proposal_.upstake.mul(PRECISION_MULTIPLIER) / proposal_.downstake;
     }
 
     function boostProposal(uint256 _proposalId) public {
@@ -149,8 +140,8 @@ contract HCVoting is Voting {
         // Calculate the sender's reward.
         uint256 totalWinningStake = supported ? proposal_.upstake : proposal_.downstake;
         uint256 totalLosingStake = supported ? proposal_.downstake : proposal_.upstake;
-        uint256 sendersWinningRatio = winningStake.mul(REWARD_MULTIPLIER) / totalWinningStake;
-        uint256 reward = sendersWinningRatio.mul(totalLosingStake) / REWARD_MULTIPLIER;
+        uint256 sendersWinningRatio = winningStake.mul(PRECISION_MULTIPLIER) / totalWinningStake;
+        uint256 reward = sendersWinningRatio.mul(totalLosingStake) / PRECISION_MULTIPLIER;
         uint256 total = winningStake.add(reward);
 
         // Transfer the tokens to the winner.

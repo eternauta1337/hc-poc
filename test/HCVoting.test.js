@@ -292,10 +292,7 @@ describe('HCVoting', () => {
                             expect(proposal.boosted).toBe(true);
 
                             // Finalize the proposal.
-                            const proposalFinalizationReceipt = await votingContract.methods.finalizeProposal(0).send({ ...txParams });
-                            expect(proposalFinalizationReceipt.events.FinalizeProposal).not.toBeNull();
-                            const args = proposalFinalizationReceipt.events.FinalizeProposal.returnValues;
-                            expect(args._proposalId).toBe(`0`);
+                            await votingContract.methods.finalizeProposal(0).send({ ...txParams });
 
                             // Verify that the proposal is finalized.
                             proposal = await votingContract.methods.getProposal(0).call();

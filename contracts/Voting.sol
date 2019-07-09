@@ -55,11 +55,11 @@ contract Voting {
         downstake = proposal_.downstake;
     }
 
-    // Vote percentages.
-    // Percentages are represented as a uint256 between 0 and 10^18 (or xx * 10^16),
-    // i.e. 0% = 0; 1% = 1 * 10^16; 50% = 50 * 10^16; 100% = 100 * 10^18.
-    uint256 internal constant PCT_MULTIPLIER = 10 ** 16;
-    uint256 public supportPct; // Percentage required for a vote to pass with absolute majority, e.g. 50%.
+    // Percentage required for a vote to pass with absolute majority, e.g. 50%.
+    uint256 public supportPct;
+
+    // Multiplier used to avoid losing precision when using division.
+    uint256 internal constant PRECISION_MULTIPLIER = 10 ** 16;
 
     // Error messages.
     string internal constant ERROR_PROPOSAL_DOES_NOT_EXIST = "VOTING_ERROR_PROPOSAL_DOES_NOT_EXIST";
@@ -176,13 +176,13 @@ contract Voting {
 
     function _verifyFinalizationWithAbsoluteMajority(Proposal storage proposal_) internal view {
         uint256 yeaPct = _votesToPct(proposal_.yea, voteToken.totalSupply());
-        require(yeaPct > supportPct * PCT_MULTIPLIER, ERROR_NOT_ENOUGH_ABSOLUTE_SUPPORT);
+        require(yeaPct > supportPct.mul(PRECISION_MULTIPLIER), ERROR_NOT_ENOUGH_ABSOLUTE_SUPPORT);
     }
 
     function _verifyFinalizationWithRelativeMajority(Proposal storage proposal_) internal view {
         uint256 totalVoted = proposal_.yea.add(proposal_.nay);
         uint256 yeaPct = _votesToPct(proposal_.yea, totalVoted);
-        require(yeaPct > supportPct * PCT_MULTIPLIER, ERROR_NOT_ENOUGH_RELATIVE_SUPPORT);
+        require(yeaPct > supportPct.mul(PRECISION_MULTIPLIER), ERROR_NOT_ENOUGH_RELATIVE_SUPPORT);
     }
 
     /*
@@ -198,7 +198,7 @@ contract Voting {
     }
 
     function _votesToPct(uint256 votes, uint256 totalVotes) internal pure returns (uint256) {
-        return votes.mul(100 * PCT_MULTIPLIER) / totalVotes;
+        return votes.mul(uint256(100).mul(PRECISION_MULTIPLIER)) / totalVotes;
     }
 
     function _userHasVotingPower(address _voter) internal view returns (bool) {
