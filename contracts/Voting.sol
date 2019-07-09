@@ -30,8 +30,8 @@ contract Voting {
         uint256 upstake;
         uint256 downstake;
         mapping (address => Vote) votes;
-        mapping (address => uint256) upstakers;
-        mapping (address => uint256) downstakers;
+        mapping (address => uint256) upstakes;
+        mapping (address => uint256) downstakes;
     }
 
     function getProposal(uint256 _proposalId) public view returns (
@@ -112,6 +112,7 @@ contract Voting {
     }
 
     function getVote(uint256 _proposalId, address _voter) public view returns (Vote) {
+        require(_proposalExists(_proposalId), ERROR_PROPOSAL_DOES_NOT_EXIST);
         Proposal storage proposal_ = proposals[_proposalId];
         return proposal_.votes[_voter];
     }
@@ -161,10 +162,10 @@ contract Voting {
 
         // Standard proposal resolution (absolute majority).
         if(proposal_.boosted) {
-            _finalizeProposalWithRelativeMajority(proposal_);
+            _verifyFinalizationWithRelativemajority(proposal_);
         }
         else {
-            _finalizeProposalWithAbsoluteMajority(proposal_);
+            _verifyFinalizationWithAbsoluteMajority(proposal_);
         }
 
         // Finalize the proposal.
@@ -173,12 +174,12 @@ contract Voting {
         emit FinalizeProposal(_proposalId);
     }
 
-    function _finalizeProposalWithAbsoluteMajority(Proposal storage proposal_) internal {
+    function _verifyFinalizationWithAbsoluteMajority(Proposal storage proposal_) internal view {
         uint256 yeaPct = _votesToPct(proposal_.yea, voteToken.totalSupply());
         require(yeaPct > supportPct * PCT_MULTIPLIER, ERROR_NOT_ENOUGH_ABSOLUTE_SUPPORT);
     }
 
-    function _finalizeProposalWithRelativeMajority(Proposal storage proposal_) internal {
+    function _verifyFinalizationWithRelativemajority(Proposal storage proposal_) internal view {
         uint256 totalVoted = proposal_.yea.add(proposal_.nay);
         uint256 yeaPct = _votesToPct(proposal_.yea, totalVoted);
         require(yeaPct > supportPct * PCT_MULTIPLIER, ERROR_NOT_ENOUGH_RELATIVE_SUPPORT);
@@ -197,7 +198,7 @@ contract Voting {
         proposal_.boosted = true;
     }
 
-    function _votesToPct(uint256 votes, uint256 totalVotes) internal view returns (uint256) {
+    function _votesToPct(uint256 votes, uint256 totalVotes) internal pure returns (uint256) {
         return votes.mul(100 * PCT_MULTIPLIER) / totalVotes;
     }
 

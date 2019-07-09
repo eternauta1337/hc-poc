@@ -19,6 +19,6 @@ fs.mkdirSync(buildPath);
 // Compile all contracts.
 contractPaths.reduce(async (previousPromise, contractPath) => {
   await previousPromise;
-  console.log(`\nCompiling ${contractPath}...`);
+    console.log(`\n>>> Compiling ${contractPath}...`);
   return pocketh(`compile`, `contracts/${contractPath}`, `build/`);
 }, Promise.resolve());

@@ -5,6 +5,7 @@ import "./Token.sol";
 import "./Voting.sol";
 
 contract HCVoting is Voting {
+    using SafeMath for uint256;
 
     // Token used for staking on proposals.
     Token public stakeToken;
@@ -14,6 +15,17 @@ contract HCVoting is Voting {
     string internal constant  ERROR_INSUFFICIENT_ALLOWANCE = "VOTING_ERROR_INSUFFICIENT_ALLOWANCE";
     string internal constant  ERROR_SENDER_DOES_NOT_HAVE_REQUIRED_STAKE = "ERROR_SENDER_DOES_NOT_HAVE_REQUIRED_STAKE ";
     string internal constant   ERROR_PROPOSAL_DOES_NOT_HAVE_REQUIRED_STAKE = "ERROR_PROPOSAL_DOES_NOT_HAVE_REQUIRED_STAKE ";
+
+    // Confidence multiplier.
+    // Confidence = upstake / downstake;
+    // To avoid precision issues, the value is mapped to a wider range using a multiplier.
+    uint256 CONFIDENCE_MULTIPLIER = 10 ** 16;
+
+    // Events.
+    event UpstakeProposal(uint256 indexed _proposalId, address indexed _staker, uint256 _amount);
+    event DownstakeProposal(uint256 indexed _proposalId, address indexed _staker, uint256 _amount);
+    event WithdrawUpstake(uint256 indexed _proposalId, address indexed _staker, uint256 _amount);
+    event WithdrawDownstake(uint256 indexed _proposalId, address indexed _staker, uint256 _amount);
 
     // TODO: Guard for only once calling.
     function initializeStaking(Token _stakeToken) public {
@@ -29,14 +41,16 @@ contract HCVoting is Voting {
         Proposal storage proposal_ = proposals[_proposalId];
 
         // Update the proposal's upstake.
-        proposal_.upstake.add(_amount);
+        proposal_.upstake = proposal_.upstake.add(_amount);
 
         // Update the staker's upstake amount.
-        proposal_.upstakers[msg.sender].add(_amount);
+        proposal_.upstakes[msg.sender] = proposal_.upstakes[msg.sender].add(_amount);
 
         // Extract the tokens from the sender and store them in this contract.
         // Note: This assumes that the sender has provided the required allowance to this contract.
         stakeToken.transferFrom(msg.sender, address(this), _amount);
+
+        emit UpstakeProposal(_proposalId, msg.sender, _amount);
     }
 
     function addDownstakeToProposal(uint256 _proposalId, uint256 _amount) public {
@@ -48,14 +62,16 @@ contract HCVoting is Voting {
         Proposal storage proposal_ = proposals[_proposalId];
 
         // Update the proposal's downstake.
-        proposal_.downstake.add(_amount);
+        proposal_.downstake = proposal_.downstake.add(_amount);
 
         // Update the staker's downstake amount.
-        proposal_.downstakers[msg.sender].add(_amount);
+        proposal_.downstakes[msg.sender] = proposal_.downstakes[msg.sender].add(_amount);
 
         // Extract the tokens from the sender and store them in this contract.
         // Note: This assumes that the sender has provided the required allowance to this contract.
         stakeToken.transferFrom(msg.sender, address(this), _amount);
+
+        emit DownstakeProposal(_proposalId, msg.sender, _amount);
     }
 
     function removeUpstakeFromProposal(uint256 _proposalId, uint256 _amount) public {
@@ -65,19 +81,21 @@ contract HCVoting is Voting {
         Proposal storage proposal_ = proposals[_proposalId];
 
         // Verify that the sender holds the required upstake to be removed.
-        require(proposal_.upstakers[msg.sender] >= _amount, ERROR_SENDER_DOES_NOT_HAVE_REQUIRED_STAKE);
+        require(proposal_.upstakes[msg.sender] >= _amount, ERROR_SENDER_DOES_NOT_HAVE_REQUIRED_STAKE);
         
         // Verify that the proposal has the required upstake to be removed.
         require(proposal_.upstake >= _amount, ERROR_PROPOSAL_DOES_NOT_HAVE_REQUIRED_STAKE);
 
         // Remove the upstake from the proposal.
-        proposal_.upstake.sub(_amount);
+        proposal_.upstake = proposal_.upstake.sub(_amount);
 
         // Remove the upstake from the sender.
-        proposal_.upstakers[msg.sender].sub(_amount);
+        proposal_.upstakes[msg.sender] = proposal_.upstakes[msg.sender].sub(_amount);
 
         // Return the tokens to the sender.
         stakeToken.transfer(msg.sender, _amount);
+
+        emit WithdrawUpstake(_proposalId, msg.sender, _amount);
     }
 
     function removeDownstakeFromProposal(uint256 _proposalId, uint256 _amount) public {
@@ -87,18 +105,39 @@ contract HCVoting is Voting {
         Proposal storage proposal_ = proposals[_proposalId];
 
         // Verify that the sender holds the required downstake to be removed.
-        require(proposal_.downstakers[msg.sender] >= _amount, ERROR_SENDER_DOES_NOT_HAVE_REQUIRED_STAKE);
+        require(proposal_.downstakes[msg.sender] >= _amount, ERROR_SENDER_DOES_NOT_HAVE_REQUIRED_STAKE);
         
         // Verify that the proposal has the required downstake to be removed.
         require(proposal_.downstake >= _amount, ERROR_PROPOSAL_DOES_NOT_HAVE_REQUIRED_STAKE);
 
         // Remove the upstake from the proposal.
-        proposal_.downstake.sub(_amount);
+        proposal_.downstake = proposal_.downstake.sub(_amount);
 
         // Remove the upstake from the sender.
-        proposal_.downstakers[msg.sender].sub(_amount);
+        proposal_.downstakes[msg.sender] = proposal_.downstakes[msg.sender].sub(_amount);
 
         // Return the tokens to the sender.
         stakeToken.transfer(msg.sender, _amount);
+
+        emit WithdrawDownstake(_proposalId, msg.sender, _amount);
+    }
+
+    function getUpstake(uint256 _proposalId, address _staker) public view returns (uint256) {
+        require(_proposalExists(_proposalId), ERROR_PROPOSAL_DOES_NOT_EXIST);
+        Proposal storage proposal_ = proposals[_proposalId];
+        return proposal_.upstakes[_staker];
+    }
+
+    function getDownstake(uint256 _proposalId, address _staker) public view returns (uint256) {
+        require(_proposalExists(_proposalId), ERROR_PROPOSAL_DOES_NOT_EXIST);
+        Proposal storage proposal_ = proposals[_proposalId];
+        return proposal_.downstakes[_staker];
+    }
+
+    function getConfidence(uint256 _proposalId) public view returns (uint256 _confidence) {
+        require(_proposalExists(_proposalId), ERROR_PROPOSAL_DOES_NOT_EXIST);
+        Proposal storage proposal_ = proposals[_proposalId];
+        // TODO: What happens when there is no downstake (division by 0).
+        _confidence = proposal_.upstake.mul(CONFIDENCE_MULTIPLIER) / proposal_.downstake;
     }
 }
