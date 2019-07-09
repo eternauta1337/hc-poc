@@ -11,29 +11,37 @@ contract HCVoting is Voting {
     Token public stakeToken;
 
     // Error messages.
-    string internal constant ERROR_SENDER_DOES_NOT_HAVE_ENOUGH_FUNDS      = "VOTING_SENDER_DOES_NOT_HAVE_ENOUGH_FUNDS";
-    string internal constant ERROR_INSUFFICIENT_ALLOWANCE                 = "VOTING_ERROR_INSUFFICIENT_ALLOWANCE";
-    string internal constant ERROR_SENDER_DOES_NOT_HAVE_REQUIRED_STAKE    = "VOTING_ERROR_SENDER_DOES_NOT_HAVE_REQUIRED_STAKE ";
-    string internal constant ERROR_PROPOSAL_DOES_NOT_HAVE_REQUIRED_STAKE  = "VOTING_ERROR_PROPOSAL_DOES_NOT_HAVE_REQUIRED_STAKE ";
-    string internal constant ERROR_PROPOSAL_DOESNT_HAVE_ENOUGH_CONFIDENCE = "VOTING_ERROR_PROPOSAL_DOESNT_HAVE_ENOUGH_CONFIDENCE";
-    string internal constant ERROR_PROPOSAL_IS_NOT_FINALIZED              = "VOTING_ERROR_PROPOSAL_IS_NOT_FINALIZED";
-    string internal constant ERROR_PROPOSAL_IS_NOT_BOOSTED                = "VOTING_ERROR_PROPOSAL_IS_NOT_BOOSTED";
-    string internal constant ERROR_NO_WINNING_STAKE                       = "VOTING_ERROR_NO_WINNING_STAKE";
-    string internal constant ERROR_VOTING_DOES_NOT_HAVE_ENOUGH_FUNDS      = "VOTING_ERROR_VOTING_DOES_NOT_HAVE_ENOUGH_FUNDS";
+    string internal constant ERROR_SENDER_DOES_NOT_HAVE_ENOUGH_FUNDS         = "VOTING_SENDER_DOES_NOT_HAVE_ENOUGH_FUNDS";
+    string internal constant ERROR_INSUFFICIENT_ALLOWANCE                    = "VOTING_ERROR_INSUFFICIENT_ALLOWANCE";
+    string internal constant ERROR_SENDER_DOES_NOT_HAVE_REQUIRED_STAKE       = "VOTING_ERROR_SENDER_DOES_NOT_HAVE_REQUIRED_STAKE ";
+    string internal constant ERROR_PROPOSAL_DOES_NOT_HAVE_REQUIRED_STAKE     = "VOTING_ERROR_PROPOSAL_DOES_NOT_HAVE_REQUIRED_STAKE ";
+    string internal constant ERROR_PROPOSAL_DOESNT_HAVE_ENOUGH_CONFIDENCE    = "VOTING_ERROR_PROPOSAL_DOESNT_HAVE_ENOUGH_CONFIDENCE";
+    string internal constant ERROR_PROPOSAL_IS_NOT_FINALIZED                 = "VOTING_ERROR_PROPOSAL_IS_NOT_FINALIZED";
+    string internal constant ERROR_PROPOSAL_IS_NOT_BOOSTED                   = "VOTING_ERROR_PROPOSAL_IS_NOT_BOOSTED";
+    string internal constant ERROR_NO_WINNING_STAKE                          = "VOTING_ERROR_NO_WINNING_STAKE";
+    string internal constant ERROR_VOTING_DOES_NOT_HAVE_ENOUGH_FUNDS         = "VOTING_ERROR_VOTING_DOES_NOT_HAVE_ENOUGH_FUNDS";
+    string internal constant ERROR_PROPOSAL_HASNT_HAD_CONFIDENCE_ENOUGH_TIME = "VOTING_ERROR_PROPOSAL_HASNT_HAD_CONFIDENCE_ENOUGH_TIME";
 
     // Confidence threshold.
     // A proposal can be boosted if it's confidence, determined by staking, is above this threshold.
+    // TODO: Make dynamic.
     uint256 CONFIDENCE_THRESHOLD = uint256(4).mul(PRECISION_MULTIPLIER);
+
+    // Time for a pended proposal to become boosted if it maintained confidence within such period.
+    uint256 public pendedBoostPeriod;
 
     // Events.
     event UpstakeProposal(uint256 indexed _proposalId, address indexed _staker, uint256 _amount);
     event DownstakeProposal(uint256 indexed _proposalId, address indexed _staker, uint256 _amount);
     event WithdrawUpstake(uint256 indexed _proposalId, address indexed _staker, uint256 _amount);
     event WithdrawDownstake(uint256 indexed _proposalId, address indexed _staker, uint256 _amount);
+    // TODO: Add an event for a proposal becoming boosted.
 
     // TODO: Guard for only once calling.
-    function initializeStaking(Token _stakeToken) public {
+    function initializeStaking(Token _stakeToken, uint256 _pendedBoostPeriod) public {
         stakeToken = _stakeToken;
+        // TODO: Check min pendendBoostPeriod?
+        pendedBoostPeriod = _pendedBoostPeriod;
     }
 
     function stake(uint256 _proposalId, uint256 _amount, bool _supports) public {
@@ -59,6 +67,9 @@ contract HCVoting is Voting {
         // Emit corresponding event.
         if(_supports) emit UpstakeProposal(_proposalId, msg.sender, _amount);
         else emit DownstakeProposal(_proposalId, msg.sender, _amount);
+
+        // A stake can change the state of a proposal.
+        _updateProposalAfterStaking(proposal_);
     }
 
     function unstake(uint256 _proposalId, uint256 _amount, bool _supports) public {
@@ -90,6 +101,34 @@ contract HCVoting is Voting {
         // Emit corresponding event.
         if(_supports) emit WithdrawUpstake(_proposalId, msg.sender, _amount);
         else emit WithdrawDownstake(_proposalId, msg.sender, _amount);
+
+        // A stake can change the state of a proposal.
+        _updateProposalAfterStaking(proposal_);
+    }
+
+    function _updateProposalAfterStaking(Proposal storage proposal_) internal {
+
+        // Get current proposal confidence.
+        uint256 currentConfidence = proposal_.upstake.mul(PRECISION_MULTIPLIER) / proposal_.downstake;
+
+        // If the proposal has enough confidence and it was in queue or unpended, pend it.
+		// If it doesn't, unpend it.
+        if(_proposalHasEnoughConfidence(proposal_)) {
+            if(proposal_.state == ProposalState.Queued || proposal_.state == ProposalState.Unpended) {
+                proposal_.lastPendedDate = now;
+                _updateProposalState(_proposalId, ProposalState.Pended);
+            }
+        }
+		else {
+			if(proposal_.state == ProposalState.Pended) {
+                _updateProposalState(_proposalId, ProposalState.Unpended);
+			}
+		}
+    }
+
+    function _proposalHasEnoughConfidence(Proposal storage proposal_) internal view returns(bool _hasConfidence) {
+        uint256 currentConfidence = proposal_.upstake.mul(PRECISION_MULTIPLIER) / proposal_.downstake;
+        _hasConfidence = currentConfidence >= CONFIDENCE_THRESHOLD;
     }
 
     function getUpstake(uint256 _proposalId, address _staker) public view returns (uint256) {
@@ -115,13 +154,20 @@ contract HCVoting is Voting {
         require(_proposalExists(_proposalId), ERROR_PROPOSAL_DOES_NOT_EXIST);
         require(_proposalIsOpen(_proposalId), ERROR_PROPOSAL_IS_CLOSED);
 
-        // Require confidence to be above a certain threshold.
-        uint256 confidence = getConfidence(_proposalId);
-        require(confidence >= CONFIDENCE_THRESHOLD, ERROR_PROPOSAL_DOESNT_HAVE_ENOUGH_CONFIDENCE);
+        // Require that the proposal is currently pended.
+        Proposal storage proposal_ = proposals[_proposalId];
+        require(proposal_.state == ProposalState.Pended);
+
+        // Require that the proposal has had enough confidence for a period of time.
+        require(_proposalHasEnoughConfidence(proposal_), ERROR_PROPOSAL_DOESNT_HAVE_ENOUGH_CONFIDENCE);
+        require(now >= proposal_.lastPendedDate.add(pendedBoostPeriod), ERROR_PROPOSAL_HASNT_HAD_CONFIDENCE_ENOUGH_TIME);
+
+        // Compensate the caller.
+        // TODO
 
         // Boost the proposal.
-        Proposal storage proposal_ = proposals[_proposalId];
-        proposal_.boosted = true;
+        _updateProposalState(_proposalId, ProposalState.Boosted);
+        proposal_.lifetime = boostPeriod;
     }
 
     function withdrawReward(uint256 _proposalId) public {
@@ -138,6 +184,7 @@ contract HCVoting is Voting {
         require(winningStake > 0, ERROR_NO_WINNING_STAKE);
 
         // Calculate the sender's reward.
+        // TODO: Calculate compensation fees.
         uint256 totalWinningStake = supported ? proposal_.upstake : proposal_.downstake;
         uint256 totalLosingStake = supported ? proposal_.downstake : proposal_.upstake;
         uint256 sendersWinningRatio = winningStake.mul(PRECISION_MULTIPLIER) / totalWinningStake;
@@ -147,5 +194,18 @@ contract HCVoting is Voting {
         // Transfer the tokens to the winner.
         require(stakeToken.balanceOf(address(this)) >= total, ERROR_VOTING_DOES_NOT_HAVE_ENOUGH_FUNDS);
         stakeToken.transfer(msg.sender, total);
+    }
+
+    function resolveBoostedProposal(uint256 _proposalId) public {
+        require(_proposalExists(_proposalId), ERROR_PROPOSAL_DOES_NOT_EXIST);
+        require(_proposalIsBoosted(_proposalId), ERROR_PROPOSAL_IS_NOT_BOOSTED);
+        require(now >= proposal_.startDate.add(proposal_.lifetime), ERROR_PROPOSAL_IS_STILL_ACTIVE);
+
+        // Compensate the caller.
+        // TODO
+
+        // Resolve the proposal.
+        Proposal storage proposal_ = proposals[_proposalId];
+        _updateProposalState(_proposalId, ProposalState.Resolved);
     }
 }

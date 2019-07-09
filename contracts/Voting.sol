@@ -13,8 +13,14 @@ contract Voting {
     mapping (uint256 => Proposal) internal proposals;
     uint256 public numProposals;
 
-    // Proposal times.
-    uint256 public proposalLifeTime;
+    // Lifetime of a proposal when it is not boosted.
+    uint256 public queuePeriod;
+
+    // Lifetime of a proposal when it is boosted.
+    // Note: The effective lifetime of a proposal when it is boosted is dynamic, and can be extended
+    // due to the requirement of quiet endings.
+    uint256 public boostPeriod;
+    uint256 public boostPeriodExtensionAfterFlip;
 
     // Vote state.
     enum VoteState { Absent, Yea, Nay }
@@ -25,6 +31,7 @@ contract Voting {
     // Proposals.
     struct Proposal {
         ProposalState state;
+        uint256 lifetime;
         uint256 startDate;
         uint256 lastVoteDate;
         uint256 lastPendedDate;
@@ -41,6 +48,7 @@ contract Voting {
 
     function getProposal(uint256 _proposalId) public view returns (
         ProposalState,
+        uint256 lifetime,
         uint256 startDate,
         uint256 lastVoteDate,
         uint256 lastPendedDate,
@@ -55,6 +63,7 @@ contract Voting {
 
         Proposal storage proposal_ = proposals[_proposalId];
         state = proposal_.state;
+        lifetime = proposal_.lifetime;
         startDate = proposal_.startDate;
         lastVoteDate = proposal_.lastVoteDate;
         lastPendedDate = proposal_.lastPendedDate;
@@ -83,8 +92,9 @@ contract Voting {
 
     // Events.
     event StartProposal(uint256 indexed _proposalId, address indexed _creator, string _metadata);
-    event CastVote(uint256 indexed _proposalId, address indexed voter, bool _supports, uint256 _stake);
-    event ResolveProposal(uint256 indexed _proposalId);
+    event CastVote(uint256 indexed _proposalId, address indexed _voter, bool _supports, uint256 _stake);
+    event ProposalStateChanged(uint256 indexed _proposalId, ProposalState _newState);
+    // event ResolveProposal(uint256 indexed _proposalId);
   
     /*
      * External functions.
@@ -94,7 +104,9 @@ contract Voting {
     function initializeVoting(
         address _voteToken, 
         uint256 _supportPct,
-        uint256 _proposalLifeTime
+        uint256 _queuePeriod,
+        uint256 _boostPeriod,
+        uint256 _boostPeriodExtensionAfterFlip
     ) 
         public
     {
@@ -106,9 +118,11 @@ contract Voting {
         require(_supportPct < 100, ERROR_INIT_SUPPORT_TOO_BIG);
         supportPct = _supportPct;
 
-        // Assign vote time.
-        // TODO: Require a min absolute majority vote time?
-        proposalLifeTime = _proposalLifeTime;
+        // Assign periods.
+        // TODO: Require min periods?
+        queuePeriod = _queuePeriod;
+        boostPeriod = _boostPeriod;
+        boostPeriodExtensionAfterFlip = _boostPeriodExtensionAfterFlip;
     }
 
 
@@ -173,19 +187,20 @@ contract Voting {
         emit CastVote(_proposalId,msg.sender, _supports, votingPower);
 
         // A vote can change the state of a proposal, e.g. resolving it.
-        _updateProposalAfterVote(proposal_);
+        _updateProposalAfterVoting(proposal_);
     }
 
-    function _updateProposalAfterVote(Proposal storage proposal_) internal {
+    function _updateProposalAfterVoting(Proposal storage proposal_) internal {
 
-        // If proposal is boosted, record current relative support
-        // and flip dates for later evaluation of a quiet ending.
+        // If proposal is boosted, evaluate quiet endings
+        // and possible extensions to its lifetime.
         if(proposal_.state == ProposalState.Boosted) {
             bool currentSupport = proposal_.lastRelativeSupport;
             bool newSupport = _calculateProposalRelativeSupport(proposal_);
             if(newSupport != currentSupport) {
                 proposal_.lastRelativeSupportFlipDate = now;
                 proposal_.lastRelativeSupport = newSupport;
+                proposal_.lifetime = proposal_.lifetime.add(_boostPeriodExtensionAfterFlip);
             }
         }
 
@@ -194,8 +209,24 @@ contract Voting {
         // Note: boosted proposals cannot auto-resolve.
         bool absoluteSupport = _calculateProposalAbsoluteSupport(proposal_);
         if(absoluteSupport == VoteState.yea) {
-            _resolveProposal(proposal_);
+            _updateProposalState(_proposalId, ProposalState.Resolved);
         }
+    }
+
+    function expireNonBoostedProposal(uint256 _proposalId) public {
+        require(_proposalExists(_proposalId), ERROR_PROPOSAL_DOES_NOT_EXIST);
+        require(_proposalIsExpired(_proposalId), ERROR_PROPOSAL_IS_CLOSED);
+        require(!_proposalIsBoosted, ERROR_PROPOSAL_IS_BOOSTED);
+
+        // Verify that the proposal's lifetime has ended.
+        Proposal storage proposal_ = proposals[_proposalId];
+        require(now >= proposal_.startDate.add(proposal_.lifetime), ERROR_PROPOSAL_IS_STILL_ACTIVE);
+
+        // Compensate the caller.
+        // TODO
+
+        // Update the proposal's state and emit an event.
+        _updateProposalState(_proposalId, ProposalState.Expired);
     }
 
     // function finalizeProposal(uint256 _proposalId) public {
@@ -217,11 +248,6 @@ contract Voting {
 
     //     emit FinalizeProposal(_proposalId);
     // }
-
-    function _resolveProposal(Proposal storage proposal_) internal {
-        proposal_.state = ProposalState.Resolved;
-        emit ResolveProposal(_proposalId);
-    }
 
     function _calculateProposalRelativeSupport(Proposal storage proposal_) internal view returns(VoteState) {
         uint256 totalVoted = proposal_.yea.add(proposal_.nay);
@@ -275,24 +301,21 @@ contract Voting {
         return _proposalId < numProposals;
     }
 
-    function _proposalIsOpen(uint256 _proposalId) internal view returns (bool) {
-        return 
-            !_proposalIsFinalized(_proposalId) && 
-            !_proposalIsExpired(_proposalId);
-    }
-
-    function _proposalIsFinalized(uint256 _proposalId) internal view returns (bool) {
-        Proposal storage proposal_ = proposals[_proposalId];
-        return proposal_.finalized;
-    }
-
     function _proposalIsExpired(uint256 _proposalId) internal view returns (bool) {
         Proposal storage proposal_ = proposals[_proposalId];
-        return now >= proposal_.startDate.add(proposalLifeTime);
+        return proposal_.state == ProposalState.Expired;
     }
 
     function _proposalIsBoosted(uint256 _proposalId) internal view returns (bool) {
         Proposal storage proposal_ = proposals[_proposalId];
         return proposal_.boosted;
+    }
+
+    function _updateProposalState(uint256 _proposalId, ProposalState _newState) internal {
+        Proposal storage proposal_ = proposals[_proposalId];
+        if(proposal_.state != _newState) {
+            proposal_.state = _newState;
+            emit ProposalStateChanged(_proposalId, _newState);
+        }
     }
 }
