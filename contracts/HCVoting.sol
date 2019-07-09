@@ -19,7 +19,6 @@ contract HCVoting is Voting {
     string internal constant ERROR_PROPOSAL_IS_NOT_FINALIZED                 = "VOTING_ERROR_PROPOSAL_IS_NOT_FINALIZED";
     string internal constant ERROR_PROPOSAL_IS_NOT_BOOSTED                   = "VOTING_ERROR_PROPOSAL_IS_NOT_BOOSTED";
     string internal constant ERROR_NO_WINNING_STAKE                          = "VOTING_ERROR_NO_WINNING_STAKE";
-    string internal constant ERROR_VOTING_DOES_NOT_HAVE_ENOUGH_FUNDS         = "VOTING_ERROR_VOTING_DOES_NOT_HAVE_ENOUGH_FUNDS";
     string internal constant ERROR_PROPOSAL_HASNT_HAD_CONFIDENCE_ENOUGH_TIME = "VOTING_ERROR_PROPOSAL_HASNT_HAD_CONFIDENCE_ENOUGH_TIME";
 
     // Confidence threshold.
@@ -47,6 +46,7 @@ contract HCVoting is Voting {
     function stake(uint256 _proposalId, uint256 _amount, bool _supports) public {
         require(_proposalExists(_proposalId), ERROR_PROPOSAL_DOES_NOT_EXIST);
         require(_proposalIsOpen(_proposalId), ERROR_PROPOSAL_IS_CLOSED);
+        require(!_proposalIsBoosted(_proposalId), ERROR_PROPOSAL_IS_BOOSTED);
         require(stakeToken.balanceOf(msg.sender) >= _amount, ERROR_SENDER_DOES_NOT_HAVE_ENOUGH_FUNDS);
         require(stakeToken.allowance(msg.sender, address(this)) >= _amount, ERROR_INSUFFICIENT_ALLOWANCE);
 
@@ -163,14 +163,53 @@ contract HCVoting is Voting {
         require(now >= proposal_.lastPendedDate.add(pendedBoostPeriod), ERROR_PROPOSAL_HASNT_HAD_CONFIDENCE_ENOUGH_TIME);
 
         // Compensate the caller.
-        // TODO
+        uint256 fee = _calculateCompensationFee(_proposalId);
+        require(stakeToken.balanceOf(address(this)) >= _fee, ERROR_VOTING_DOES_NOT_HAVE_ENOUGH_FUNDS);
+        stakeToken.transfer(msg.sender, _fee);
 
         // Boost the proposal.
         _updateProposalState(_proposalId, ProposalState.Boosted);
         proposal_.lifetime = boostPeriod;
     }
 
-    function withdrawReward(uint256 _proposalId) public {
+    function withdrawStakeFromExpiredQueuedProposal(uint256 _proposalId) public {
+        require(_proposalExists(_proposalId), ERROR_PROPOSAL_DOES_NOT_EXIST);
+        require(_proposalIsFinalized(_proposalId), ERROR_PROPOSAL_IS_NOT_FINALIZED);
+
+        // Require the proposal's state to not be resolved or boosted.
+        Proposal storage proposal_ = proposals[_proposalId];
+        require(proposal_.state != ProposalState.Resolved);
+        require(proposal_.state != ProposalState.Boosted);
+
+        // Calculate the amount of that the user has staked.
+        uint256 senderUpstake = proposal_.upstakes[msg.sender];
+        uint256 senderDownstake = proposal_.downstakes[msg.sender];
+        uint256 senderTotalStake = senderUpstake.add(senderDownstake);
+        require(totalStake > 0, ERROR_NO_STAKE_TO_WITHDRAW);
+
+        // Callculate the staker's final payout, by subtracting the
+        // expiration call fee proportionally to the amount of stake that the user made.
+        uint256 compensationFee = _calculateCompensationFee(_proposalId);
+        uint256 totalStake = proposal_.upstake.add(proposal_.downstake);
+        uint256 senderTotalStakeRatio = senderTotalStake.mul(PRECISION_MULTIPLIER) / totalStake;
+        uint256 senderFeeContribution = senderTotalUpstakeRatio.mul(totalStake) / PRECISION_MULTIPLIER;
+        uint256 payout = senderTotalStake.sub(senderFeeContribution);
+
+        // Remove the stake from the proposal.
+        proposal_.upstake = proposal_.upstake.sub(upstake);
+        proposal_.downstake = proposal_.downstake.sub(downstake);
+
+        // Remove the stake from the sender.
+        proposal_.upstakes[msg.sender] = proposal_.upstakes[msg.sender].sub(upstake);
+        proposal_.downstakes[msg.sender] = proposal_.downstakes[msg.sender].sub(downstake);
+
+        // Return the tokens to the sender.
+        require(stakeToken.balanceOf(address(this)) >= payout, ERROR_VOTING_DOES_NOT_HAVE_ENOUGH_FUNDS);
+        stakeToken.transfer(msg.sender, payout);
+
+    }
+
+    function withdrawRewardFromResolvedBoostedProposal(uint256 _proposalId) public {
         require(_proposalExists(_proposalId), ERROR_PROPOSAL_DOES_NOT_EXIST);
         require(_proposalIsFinalized(_proposalId), ERROR_PROPOSAL_IS_NOT_FINALIZED);
         require(_proposalIsBoosted(_proposalId), ERROR_PROPOSAL_IS_NOT_BOOSTED);
@@ -184,9 +223,10 @@ contract HCVoting is Voting {
         require(winningStake > 0, ERROR_NO_WINNING_STAKE);
 
         // Calculate the sender's reward.
-        // TODO: Calculate compensation fees.
+        uint256 compensationFee = _calculateCompensationFee(_proposalId);
         uint256 totalWinningStake = supported ? proposal_.upstake : proposal_.downstake;
         uint256 totalLosingStake = supported ? proposal_.downstake : proposal_.upstake;
+        totalLosingStake = totalLosingStake.sub(compensationFee);
         uint256 sendersWinningRatio = winningStake.mul(PRECISION_MULTIPLIER) / totalWinningStake;
         uint256 reward = sendersWinningRatio.mul(totalLosingStake) / PRECISION_MULTIPLIER;
         uint256 total = winningStake.add(reward);
@@ -202,7 +242,9 @@ contract HCVoting is Voting {
         require(now >= proposal_.startDate.add(proposal_.lifetime), ERROR_PROPOSAL_IS_STILL_ACTIVE);
 
         // Compensate the caller.
-        // TODO
+        uint256 fee = _calculateCompensationFee(_proposalId);
+        require(stakeToken.balanceOf(address(this)) >= _fee, ERROR_VOTING_DOES_NOT_HAVE_ENOUGH_FUNDS);
+        stakeToken.transfer(msg.sender, _fee);
 
         // Resolve the proposal.
         Proposal storage proposal_ = proposals[_proposalId];

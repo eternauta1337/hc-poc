@@ -22,6 +22,9 @@ contract Voting {
     uint256 public boostPeriod;
     uint256 public boostPeriodExtensionAfterFlip;
 
+    // Compensation fee for external callers of functions that resolve and expire proposals.
+    uint256 compensationFeePct;
+
     // Vote state.
     enum VoteState { Absent, Yea, Nay }
 
@@ -82,19 +85,19 @@ contract Voting {
     uint256 internal constant PRECISION_MULTIPLIER = 10 ** 16;
 
     // Error messages.
-    string internal constant ERROR_PROPOSAL_DOES_NOT_EXIST     = "VOTING_ERROR_PROPOSAL_DOES_NOT_EXIST";
-    string internal constant ERROR_PROPOSAL_IS_CLOSED          = "VOTING_ERROR_PROPOSAL_IS_CLOSED";
-    string internal constant ERROR_INIT_SUPPORT_TOO_SMALL      = "VOTING_ERROR_INIT_SUPPORT_TOO_SMALL";
-    string internal constant ERROR_INIT_SUPPORT_TOO_BIG        = "VOTING_ERROR_INIT_SUPPORT_TOO_BIG";
-    string internal constant ERROR_USER_HAS_NO_VOTING_POWER    = "VOTING_ERROR_USER_HAS_NO_VOTING_POWER";
-    string internal constant ERROR_NOT_ENOUGH_ABSOLUTE_SUPPORT = "VOTING_NOT_ENOUGH_ABSOLUTE_SUPPORT";
-    string internal constant ERROR_NOT_ENOUGH_RELATIVE_SUPPORT = "VOTING_ERROR_NOT_ENOUGH_RELATIVE_SUPPORT";
+    string internal constant ERROR_PROPOSAL_DOES_NOT_EXIST           = "VOTING_ERROR_PROPOSAL_DOES_NOT_EXIST";
+    string internal constant ERROR_PROPOSAL_IS_CLOSED                = "VOTING_ERROR_PROPOSAL_IS_CLOSED";
+    string internal constant ERROR_INIT_SUPPORT_TOO_SMALL            = "VOTING_ERROR_INIT_SUPPORT_TOO_SMALL";
+    string internal constant ERROR_INIT_SUPPORT_TOO_BIG              = "VOTING_ERROR_INIT_SUPPORT_TOO_BIG";
+    string internal constant ERROR_USER_HAS_NO_VOTING_POWER          = "VOTING_ERROR_USER_HAS_NO_VOTING_POWER";
+    string internal constant ERROR_NOT_ENOUGH_ABSOLUTE_SUPPORT       = "VOTING_NOT_ENOUGH_ABSOLUTE_SUPPORT";
+    string internal constant ERROR_NOT_ENOUGH_RELATIVE_SUPPORT       = "VOTING_ERROR_NOT_ENOUGH_RELATIVE_SUPPORT";
+    string internal constant ERROR_VOTING_DOES_NOT_HAVE_ENOUGH_FUNDS = "VOTING_ERROR_VOTING_DOES_NOT_HAVE_ENOUGH_FUNDS";
 
     // Events.
     event StartProposal(uint256 indexed _proposalId, address indexed _creator, string _metadata);
     event CastVote(uint256 indexed _proposalId, address indexed _voter, bool _supports, uint256 _stake);
     event ProposalStateChanged(uint256 indexed _proposalId, ProposalState _newState);
-    // event ResolveProposal(uint256 indexed _proposalId);
   
     /*
      * External functions.
@@ -106,7 +109,8 @@ contract Voting {
         uint256 _supportPct,
         uint256 _queuePeriod,
         uint256 _boostPeriod,
-        uint256 _boostPeriodExtensionAfterFlip
+        uint256 _boostPeriodExtensionAfterFlip,
+        uint256 _compensationFeePct
     ) 
         public
     {
@@ -123,6 +127,10 @@ contract Voting {
         queuePeriod = _queuePeriod;
         boostPeriod = _boostPeriod;
         boostPeriodExtensionAfterFlip = _boostPeriodExtensionAfterFlip;
+
+        // Assign fees.
+        // TODO: Contain?
+        compensationFeePct = _compensationFeePct;
     }
 
 
@@ -223,7 +231,9 @@ contract Voting {
         require(now >= proposal_.startDate.add(proposal_.lifetime), ERROR_PROPOSAL_IS_STILL_ACTIVE);
 
         // Compensate the caller.
-        // TODO
+        uint256 fee = _calculateCompensationFee(_proposalId);
+        require(stakeToken.balanceOf(address(this)) >= _fee, ERROR_VOTING_DOES_NOT_HAVE_ENOUGH_FUNDS);
+        stakeToken.transfer(msg.sender, _fee);
 
         // Update the proposal's state and emit an event.
         _updateProposalState(_proposalId, ProposalState.Expired);
@@ -317,5 +327,16 @@ contract Voting {
             proposal_.state = _newState;
             emit ProposalStateChanged(_proposalId, _newState);
         }
+    }
+
+    function _calculateCompensationFee(_proposalId) internal returns(uint256 _fee) {
+
+        // Require that the proposal has potentially expired.
+        Proposal storage proposal_ = proposals[_proposalId];
+        require(now >= proposal_.startDate.add(proposal_.lifetime), ERROR_PROPOSAL_IS_STILL_ACTIVE);
+
+        // Calculate fee.
+        uint256 timeSinceExpiration = now.sub(proposal_.startDate.add(proposal_.lifetime));
+        _fee = timeSinceExpiration / compensationFeePct.mul(proposal_.upstake);
     }
 }
