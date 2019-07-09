@@ -3,7 +3,8 @@ const deploy = require('../scripts/deploy.js');
 const util = require('../scripts/util.js');
 const reverts = require('../scripts/reverts.js');
 
-describe('Voting', () => {
+// TODO: Remove
+describe.skip('Voting', () => {
 
     let web3;
     let accounts;
