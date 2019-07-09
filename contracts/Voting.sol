@@ -17,27 +17,35 @@ contract Voting {
     uint256 public proposalLifeTime;
 
     // Vote state.
-    // TODO: Rename to VoteState.
-    enum Vote { Absent, Yea, Nay }
+    enum VoteState { Absent, Yea, Nay }
+
+    // Proposal state.
+    enum ProposalState { Queued, Unpended, Pended, Boosted, Resolved, Expired }
 
     // Proposals.
     struct Proposal {
-        bool finalized;
-        bool boosted;
+        ProposalState state;
         uint256 startDate;
+        uint256 lastVoteDate;
+        uint256 lastPendedDate;
+        uint256 lastRelativeSupportFlipDate;
+        VoteState lastRelativeSupport;
         uint256 yea;
         uint256 nay;
         uint256 upstake;
         uint256 downstake;
-        mapping (address => Vote) votes;
+        mapping (address => VoteState) votes;
         mapping (address => uint256) upstakes;
         mapping (address => uint256) downstakes;
     }
 
     function getProposal(uint256 _proposalId) public view returns (
-        bool finalized,
-        bool boosted,
+        ProposalState,
         uint256 startDate,
+        uint256 lastVoteDate,
+        uint256 lastPendedDate,
+        uint256 lastRelativeSupportFlipDate,
+        VoteState lastRelativeSupport,
         uint256 yea,
         uint256 nay,
         uint256 upstake,
@@ -46,9 +54,12 @@ contract Voting {
         require(_proposalExists(_proposalId), ERROR_PROPOSAL_DOES_NOT_EXIST);
 
         Proposal storage proposal_ = proposals[_proposalId];
-        finalized = proposal_.finalized;
-        boosted = proposal_.boosted;
+        state = proposal_.state;
         startDate = proposal_.startDate;
+        lastVoteDate = proposal_.lastVoteDate;
+        lastPendedDate = proposal_.lastPendedDate;
+        lastRelativeSupportFlipDate = proposal_.lastRelativeSupportFlipDate;
+        lastRelativeSupport = proposal_.lastRelativeSupport;
         yea = proposal_.yea;
         nay = proposal_.nay;
         upstake = proposal_.upstake;
@@ -58,12 +69,12 @@ contract Voting {
     // Percentage required for a vote to pass with absolute majority, e.g. 50%.
     uint256 public supportPct;
 
-    // Multiplier used to avoid losing precision when using division.
+    // Multiplier used to avoid losing precision when using division or calculating percentages.
     uint256 internal constant PRECISION_MULTIPLIER = 10 ** 16;
 
     // Error messages.
-    string internal constant ERROR_PROPOSAL_DOES_NOT_EXIST = "VOTING_ERROR_PROPOSAL_DOES_NOT_EXIST";
-    string internal constant ERROR_PROPOSAL_IS_CLOSED      = "VOTING_ERROR_PROPOSAL_IS_CLOSED";
+    string internal constant ERROR_PROPOSAL_DOES_NOT_EXIST     = "VOTING_ERROR_PROPOSAL_DOES_NOT_EXIST";
+    string internal constant ERROR_PROPOSAL_IS_CLOSED          = "VOTING_ERROR_PROPOSAL_IS_CLOSED";
     string internal constant ERROR_INIT_SUPPORT_TOO_SMALL      = "VOTING_ERROR_INIT_SUPPORT_TOO_SMALL";
     string internal constant ERROR_INIT_SUPPORT_TOO_BIG        = "VOTING_ERROR_INIT_SUPPORT_TOO_BIG";
     string internal constant ERROR_USER_HAS_NO_VOTING_POWER    = "VOTING_ERROR_USER_HAS_NO_VOTING_POWER";
@@ -73,7 +84,7 @@ contract Voting {
     // Events.
     event StartProposal(uint256 indexed _proposalId, address indexed _creator, string _metadata);
     event CastVote(uint256 indexed _proposalId, address indexed voter, bool _supports, uint256 _stake);
-    event FinalizeProposal(uint256 indexed _proposalId);
+    event ResolveProposal(uint256 indexed _proposalId);
   
     /*
      * External functions.
@@ -102,17 +113,22 @@ contract Voting {
 
 
     function createProposal(string memory _metadata) public returns (uint256 proposalId) {
+
+        // Increment proposalId.
         proposalId = numProposals;
         numProposals++;
 
+        // Initialize proposal.
         Proposal storage proposal_ = proposals[proposalId];
         proposal_.startDate = now;
 
         emit StartProposal(proposalId, msg.sender, _metadata);
     }
 
-    function getVote(uint256 _proposalId, address _voter) public view returns (Vote) {
+    function getVote(uint256 _proposalId, address _voter) public view returns (VoteState) {
         require(_proposalExists(_proposalId), ERROR_PROPOSAL_DOES_NOT_EXIST);
+
+        // Retrieve the voter's vote.
         Proposal storage proposal_ = proposals[_proposalId];
         return proposal_.votes[_voter];
     }
@@ -123,12 +139,12 @@ contract Voting {
         require(_proposalIsOpen(_proposalId), ERROR_PROPOSAL_IS_CLOSED);
         require(_userHasVotingPower(msg.sender), ERROR_USER_HAS_NO_VOTING_POWER);
 
-        Proposal storage proposal_ = proposals[_proposalId];
 
         // Get the user's voting power.
         uint256 votingPower = voteToken.balanceOf(msg.sender);
 
         // Has the user previously voted?
+        Proposal storage proposal_ = proposals[_proposalId];
         Vote previousVote = proposal_.votes[msg.sender];
 
         // TODO: Can be optimized, but be careful.
@@ -151,39 +167,89 @@ contract Voting {
         // Update the user's vote state.
         proposal_.votes[msg.sender] = _supports ? Vote.Yea : Vote.Nay;
 
+        // Record last vote date.
+        proposal_.lastVoteDate = now;
+
         emit CastVote(_proposalId,msg.sender, _supports, votingPower);
+
+        // A vote can change the state of a proposal, e.g. resolving it.
+        _updateProposalAfterVote(proposal_);
     }
 
-    function finalizeProposal(uint256 _proposalId) public {
-        require(_proposalExists(_proposalId), ERROR_PROPOSAL_DOES_NOT_EXIST);
-        require(!_proposalIsFinalized(_proposalId), ERROR_PROPOSAL_IS_CLOSED);
+    function _updateProposalAfterVote(Proposal storage proposal_) internal {
+
+        // If proposal is boosted, record current relative support
+        // and flip dates for later evaluation of a quiet ending.
+        if(proposal_.state == ProposalState.Boosted) {
+            bool currentSupport = proposal_.lastRelativeSupport;
+            bool newSupport = _calculateProposalRelativeSupport(proposal_);
+            if(newSupport != currentSupport) {
+                proposal_.lastRelativeSupportFlipDate = now;
+                proposal_.lastRelativeSupport = newSupport;
+            }
+        }
+
+        // Evaluate proposal resolution by absolute majority,
+        // no matter if it is boosted or not.
+        // Note: boosted proposals cannot auto-resolve.
+        bool absoluteSupport = _calculateProposalAbsoluteSupport(proposal_);
+        if(absoluteSupport == VoteState.yea) {
+            _resolveProposal(proposal_);
+        }
+    }
+
+    // function finalizeProposal(uint256 _proposalId) public {
+    //     require(_proposalExists(_proposalId), ERROR_PROPOSAL_DOES_NOT_EXIST);
+    //     require(!_proposalIsFinalized(_proposalId), ERROR_PROPOSAL_IS_CLOSED);
         
-        Proposal storage proposal_ = proposals[_proposalId];
+    //     Proposal storage proposal_ = proposals[_proposalId];
 
-        // Standard proposal resolution (absolute majority).
-        if(proposal_.boosted) {
-            _verifyFinalizationWithRelativeMajority(proposal_);
-        }
-        else {
-            _verifyFinalizationWithAbsoluteMajority(proposal_);
-        }
+    //     // Standard proposal resolution (absolute majority).
+    //     if(proposal_.boosted) {
+    //         _verifyFinalizationWithRelativeMajority(proposal_);
+    //     }
+    //     else {
+    //         _verifyFinalizationWithAbsoluteMajority(proposal_);
+    //     }
 
-        // Finalize the proposal.
-        proposal_.finalized = true;
+    //     // Finalize the proposal.
+    //     proposal_.finalized = true;
 
-        emit FinalizeProposal(_proposalId);
+    //     emit FinalizeProposal(_proposalId);
+    // }
+
+    function _resolveProposal(Proposal storage proposal_) internal {
+        proposal_.state = ProposalState.Resolved;
+        emit ResolveProposal(_proposalId);
     }
 
-    function _verifyFinalizationWithAbsoluteMajority(Proposal storage proposal_) internal view {
-        uint256 yeaPct = _votesToPct(proposal_.yea, voteToken.totalSupply());
-        require(yeaPct > supportPct.mul(PRECISION_MULTIPLIER), ERROR_NOT_ENOUGH_ABSOLUTE_SUPPORT);
-    }
-
-    function _verifyFinalizationWithRelativeMajority(Proposal storage proposal_) internal view {
+    function _calculateProposalRelativeSupport(Proposal storage proposal_) internal view returns(VoteState) {
         uint256 totalVoted = proposal_.yea.add(proposal_.nay);
         uint256 yeaPct = _votesToPct(proposal_.yea, totalVoted);
-        require(yeaPct > supportPct.mul(PRECISION_MULTIPLIER), ERROR_NOT_ENOUGH_RELATIVE_SUPPORT);
+        uint256 nayPct = _votesToPct(proposal_.nay, totalVoted);
+        if(yeaPct > supportPct.mul(PRECISION_MULTIPLIER)) return VoteState.Yea;
+        if(nayPct > supportPcT.mul(PRECISION_MULTIPLIER)) return VoteState.Nay;
+        return VoteState.Absent;
     }
+
+    // function _verifyFinalizationWithRelativeMajority(Proposal storage proposal_) internal view {
+    //     uint256 yeaPct = _calculateProposalRelativeSupport(proposal_);
+    //     require(yeaPct > supportPct.mul(PRECISION_MULTIPLIER), ERROR_NOT_ENOUGH_RELATIVE_SUPPORT);
+    // }
+
+    function _calculateProposalAbsoluteSupport(Proposal storage proposal_) internal view returns(VoteState) {
+        uint256 totalSupply = voteToken.totalSupply();
+        uint256 yeaPct = _votesToPct(proposal_.yea, totalSupply);
+        uint256 nayPct = _votesToPct(proposal_.nay, totalSupply);
+        if(yeaPct > supportPct.mul(PRECISION_MULTIPLIER)) return VoteState.Yea;
+        if(nayPct > supportPcT.mul(PRECISION_MULTIPLIER)) return VoteState.Nay;
+        return VoteState.Absent;
+    }
+
+    // function _verifyFinalizationWithAbsoluteMajority(Proposal storage proposal_) internal view {
+    //     uint256 yeaPct = _votesToPct(proposal_.yea, voteToken.totalSupply());
+    //     require(yeaPct > supportPct.mul(PRECISION_MULTIPLIER), ERROR_NOT_ENOUGH_ABSOLUTE_SUPPORT);
+    // }
 
     /*
      * Internal functions.

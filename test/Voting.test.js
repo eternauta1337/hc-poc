@@ -99,7 +99,6 @@ describe('Voting', () => {
                 const startDateDeltaSecs = ( new Date().getTime() / 1000 ) - parseInt(proposal.startDate, 10);
                 expect(startDateDeltaSecs).toBeLessThan(2);
             });
-
             
             describe('When voting on proposals', () => {
 
