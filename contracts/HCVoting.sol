@@ -2,7 +2,7 @@ pragma solidity ^0.5.0;
 
 import "./SafeMath.sol";
 import "./Token.sol";
-import "./HCErrors.sol";
+import "./HCBase.sol";
 
 contract HCVoting is HCBase {
     using SafeMath for uint256;
@@ -50,7 +50,7 @@ contract HCVoting is HCBase {
         compensationFeePct = _compensationFeePct;
     }
 
-
+    // TODO: Could be in base
     function createProposal(string memory _metadata) public returns (uint256 proposalId) {
 
         // Increment proposalId.
@@ -67,8 +67,10 @@ contract HCVoting is HCBase {
     // TODO: Guard on who can vote?
     function vote(uint256 _proposalId, bool _supports) public {
         require(_proposalExists(_proposalId), ERROR_PROPOSAL_DOES_NOT_EXIST);
-        require(_proposalIsOpen(_proposalId), ERROR_PROPOSAL_IS_CLOSED);
         require(_userHasVotingPower(msg.sender), ERROR_USER_HAS_NO_VOTING_POWER);
+        // TODO: Different errors for these
+        require(!_proposalStateIs(_proposalId, ProposalState.Expired), ERROR_PROPOSAL_IS_CLOSED);
+        require(!_proposalStateIs(_proposalId, ProposalState.Resolved), ERROR_PROPOSAL_IS_CLOSED);
 
 
         // Get the user's voting power.
@@ -76,14 +78,14 @@ contract HCVoting is HCBase {
 
         // Has the user previously voted?
         Proposal storage proposal_ = proposals[_proposalId];
-        Vote previousVote = proposal_.votes[msg.sender];
+        VoteState previousVote = proposal_.votes[msg.sender];
 
         // TODO: Can be optimized, but be careful.
         // Clean up the user's previous vote, if existent.
-        if(previousVote == Vote.Yea) {
+        if(previousVote == VoteState.Yea) {
             proposal_.yea = proposal_.yea.sub(votingPower);
         }
-        else if(previousVote == Vote.Nay) {
+        else if(previousVote == VoteState.Nay) {
             proposal_.nay = proposal_.nay.sub(votingPower);
         }
 
@@ -96,15 +98,12 @@ contract HCVoting is HCBase {
         }
 
         // Update the user's vote state.
-        proposal_.votes[msg.sender] = _supports ? Vote.Yea : Vote.Nay;
-
-        // Record last vote date.
-        proposal_.lastVoteDate = now;
+        proposal_.votes[msg.sender] = _supports ? VoteState.Yea : VoteState.Nay;
 
         emit CastVote(_proposalId,msg.sender, _supports, votingPower);
 
         // A vote can change the state of a proposal, e.g. resolving it.
-        _updateProposalAfterVoting(proposal_);
+        _updateProposalAfterVoting(_proposalId);
     }
 
     /*
@@ -123,29 +122,32 @@ contract HCVoting is HCBase {
      * Internal functions.
      */
 
-    function _updateProposalAfterVoting(Proposal storage proposal_) internal {
-
-        // If proposal is boosted, evaluate quiet endings
-        // and possible extensions to its lifetime.
-        if(proposal_.state == ProposalState.Boosted) {
-            bool currentSupport = proposal_.lastRelativeSupport;
-            bool newSupport = _calculateProposalRelativeSupport(proposal_);
-            if(newSupport != currentSupport) {
-                proposal_.lastRelativeSupportFlipDate = now;
-                proposal_.lastRelativeSupport = newSupport;
-                proposal_.lifetime = proposal_.lifetime.add(_boostPeriodExtensionAfterFlip);
-            }
-        }
+    function _updateProposalAfterVoting(uint256 _proposalId) internal {
 
         // Evaluate proposal resolution by absolute majority,
         // no matter if it is boosted or not.
         // Note: boosted proposals cannot auto-resolve.
-        bool absoluteSupport = _calculateProposalAbsoluteSupport(proposal_);
-        if(absoluteSupport == VoteState.yea) {
+        Proposal storage proposal_ = proposals[_proposalId];
+        VoteState absoluteSupport = _calculateProposalAbsoluteSupport(proposal_);
+        if(absoluteSupport == VoteState.Yea) {
             _updateProposalState(_proposalId, ProposalState.Resolved);
+            return;
+        }
+
+        // If proposal is boosted, evaluate quiet endings
+        // and possible extensions to its lifetime.
+        if(proposal_.state == ProposalState.Boosted) {
+            VoteState currentSupport = proposal_.lastRelativeSupport;
+            VoteState newSupport = _calculateProposalRelativeSupport(proposal_);
+            if(newSupport != currentSupport) {
+                proposal_.lastRelativeSupportFlipDate = now;
+                proposal_.lastRelativeSupport = newSupport;
+                proposal_.lifetime = proposal_.lifetime.add(boostPeriodExtensionAfterFlip);
+            }
         }
     }
 
+    // TODO: HCBase?
     function _updateProposalState(uint256 _proposalId, ProposalState _newState) internal {
         Proposal storage proposal_ = proposals[_proposalId];
         if(proposal_.state != _newState) {
@@ -154,12 +156,13 @@ contract HCVoting is HCBase {
         }
     }
 
+    // TODO: A bit of duplicate code here
     function _calculateProposalAbsoluteSupport(Proposal storage proposal_) internal view returns(VoteState) {
         uint256 totalSupply = voteToken.totalSupply();
         uint256 yeaPct = _votesToPct(proposal_.yea, totalSupply);
         uint256 nayPct = _votesToPct(proposal_.nay, totalSupply);
         if(yeaPct > supportPct.mul(PRECISION_MULTIPLIER)) return VoteState.Yea;
-        if(nayPct > supportPcT.mul(PRECISION_MULTIPLIER)) return VoteState.Nay;
+        if(nayPct > supportPct.mul(PRECISION_MULTIPLIER)) return VoteState.Nay;
         return VoteState.Absent;
     }
 
@@ -168,7 +171,7 @@ contract HCVoting is HCBase {
         uint256 yeaPct = _votesToPct(proposal_.yea, totalVoted);
         uint256 nayPct = _votesToPct(proposal_.nay, totalVoted);
         if(yeaPct > supportPct.mul(PRECISION_MULTIPLIER)) return VoteState.Yea;
-        if(nayPct > supportPcT.mul(PRECISION_MULTIPLIER)) return VoteState.Nay;
+        if(nayPct > supportPct.mul(PRECISION_MULTIPLIER)) return VoteState.Nay;
         return VoteState.Absent;
     }
 

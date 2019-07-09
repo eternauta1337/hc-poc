@@ -2,7 +2,6 @@ pragma solidity ^0.5.0;
 
 import "./SafeMath.sol";
 import "./Token.sol";
-import "./Voting.sol";
 import "./HCVoting.sol";
 
 contract HCStaking is HCVoting {
@@ -36,8 +35,10 @@ contract HCStaking is HCVoting {
 
     function stake(uint256 _proposalId, uint256 _amount, bool _supports) public {
         require(_proposalExists(_proposalId), ERROR_PROPOSAL_DOES_NOT_EXIST);
-        require(_proposalIsOpen(_proposalId), ERROR_PROPOSAL_IS_CLOSED);
-        require(!_proposalIsBoosted(_proposalId), ERROR_PROPOSAL_IS_BOOSTED);
+        // TODO: Different errors for these
+        require(!_proposalStateIs(_proposalId, ProposalState.Expired), ERROR_PROPOSAL_IS_CLOSED);
+        require(!_proposalStateIs(_proposalId, ProposalState.Resolved), ERROR_PROPOSAL_IS_CLOSED);
+        require(!_proposalStateIs(_proposalId, ProposalState.Boosted), ERROR_PROPOSAL_IS_BOOSTED);
         require(stakeToken.balanceOf(msg.sender) >= _amount, ERROR_SENDER_DOES_NOT_HAVE_ENOUGH_FUNDS);
         require(stakeToken.allowance(msg.sender, address(this)) >= _amount, ERROR_INSUFFICIENT_ALLOWANCE);
 
@@ -60,12 +61,14 @@ contract HCStaking is HCVoting {
         else emit DownstakeProposal(_proposalId, msg.sender, _amount);
 
         // A stake can change the state of a proposal.
-        _updateProposalAfterStaking(proposal_);
+        _updateProposalAfterStaking(_proposalId);
     }
 
     function unstake(uint256 _proposalId, uint256 _amount, bool _supports) public {
         require(_proposalExists(_proposalId), ERROR_PROPOSAL_DOES_NOT_EXIST);
-        require(_proposalIsOpen(_proposalId) || !_proposalIsBoosted(_proposalId), ERROR_PROPOSAL_IS_CLOSED);
+        // TODO: Different errors for these
+        require(!_proposalStateIs(_proposalId, ProposalState.Expired), ERROR_PROPOSAL_IS_CLOSED);
+        require(!_proposalStateIs(_proposalId, ProposalState.Resolved), ERROR_PROPOSAL_IS_CLOSED);
 
         Proposal storage proposal_ = proposals[_proposalId];
 
@@ -94,7 +97,7 @@ contract HCStaking is HCVoting {
         else emit WithdrawDownstake(_proposalId, msg.sender, _amount);
 
         // A stake can change the state of a proposal.
-        _updateProposalAfterStaking(proposal_);
+        _updateProposalAfterStaking(_proposalId);
     }
 
     /*
@@ -124,13 +127,11 @@ contract HCStaking is HCVoting {
      * Internal functions.
      */
 
-    function _updateProposalAfterStaking(Proposal storage proposal_) internal {
-
-        // Get current proposal confidence.
-        uint256 currentConfidence = proposal_.upstake.mul(PRECISION_MULTIPLIER) / proposal_.downstake;
+    function _updateProposalAfterStaking(uint256 _proposalId) internal {
 
         // If the proposal has enough confidence and it was in queue or unpended, pend it.
 		// If it doesn't, unpend it.
+        Proposal storage proposal_ = proposals[_proposalId];
         if(_proposalHasEnoughConfidence(proposal_)) {
             if(proposal_.state == ProposalState.Queued || proposal_.state == ProposalState.Unpended) {
                 proposal_.lastPendedDate = now;

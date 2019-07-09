@@ -1,6 +1,6 @@
 pragma solidity ^0.5.0;
 
-contract HCErrors {
+contract HCBase {
 
     // Vote state.
     // Absent: A vote that hasn't been made yet.
@@ -21,7 +21,6 @@ contract HCErrors {
         ProposalState state;
         uint256 lifetime;
         uint256 startDate;
-        uint256 lastVoteDate;
         uint256 lastPendedDate;
         uint256 lastRelativeSupportFlipDate;
         VoteState lastRelativeSupport;
@@ -35,10 +34,9 @@ contract HCErrors {
     }
 
     function getProposal(uint256 _proposalId) public view returns (
-        ProposalState,
+        ProposalState state,
         uint256 lifetime,
         uint256 startDate,
-        uint256 lastVoteDate,
         uint256 lastPendedDate,
         uint256 lastRelativeSupportFlipDate,
         VoteState lastRelativeSupport,
@@ -53,7 +51,6 @@ contract HCErrors {
         state = proposal_.state;
         lifetime = proposal_.lifetime;
         startDate = proposal_.startDate;
-        lastVoteDate = proposal_.lastVoteDate;
         lastPendedDate = proposal_.lastPendedDate;
         lastRelativeSupportFlipDate = proposal_.lastRelativeSupportFlipDate;
         lastRelativeSupport = proposal_.lastRelativeSupport;
@@ -98,6 +95,7 @@ contract HCErrors {
     string internal constant ERROR_PROPOSAL_DOESNT_HAVE_ENOUGH_CONFIDENCE    = "VOTING_ERROR_PROPOSAL_DOESNT_HAVE_ENOUGH_CONFIDENCE";
     string internal constant ERROR_PROPOSAL_IS_NOT_FINALIZED                 = "VOTING_ERROR_PROPOSAL_IS_NOT_FINALIZED";
     string internal constant ERROR_PROPOSAL_IS_NOT_BOOSTED                   = "VOTING_ERROR_PROPOSAL_IS_NOT_BOOSTED";
+    string internal constant ERROR_PROPOSAL_IS_BOOSTED                       = "VOTING_ERROR_PROPOSAL_IS_BOOSTED";
     string internal constant ERROR_NO_WINNING_STAKE                          = "VOTING_ERROR_NO_WINNING_STAKE";
     string internal constant ERROR_PROPOSAL_HASNT_HAD_CONFIDENCE_ENOUGH_TIME = "VOTING_ERROR_PROPOSAL_HASNT_HAD_CONFIDENCE_ENOUGH_TIME";
     string internal constant ERROR_PROPOSAL_DOES_NOT_EXIST                   = "VOTING_ERROR_PROPOSAL_DOES_NOT_EXIST";
@@ -108,6 +106,8 @@ contract HCErrors {
     string internal constant ERROR_NOT_ENOUGH_ABSOLUTE_SUPPORT               = "VOTING_NOT_ENOUGH_ABSOLUTE_SUPPORT";
     string internal constant ERROR_NOT_ENOUGH_RELATIVE_SUPPORT               = "VOTING_ERROR_NOT_ENOUGH_RELATIVE_SUPPORT";
     string internal constant ERROR_VOTING_DOES_NOT_HAVE_ENOUGH_FUNDS         = "VOTING_ERROR_VOTING_DOES_NOT_HAVE_ENOUGH_FUNDS";
+    string internal constant ERROR_PROPOSAL_IS_ACTIVE                        = "VOTING_ERROR_PROPOSAL_IS_ACTIVE";
+    string internal constant ERROR_NO_STAKE_TO_WITHDRAW                      = "VOTING_ERROR_NO_STAKE_TO_WITHDRAW";
 
     /*
      * Utility functions.
@@ -117,13 +117,8 @@ contract HCErrors {
         return _proposalId < numProposals;
     }
 
-    function _proposalIsExpired(uint256 _proposalId) internal view returns (bool) {
+    function _proposalStateIs(uint256 _proposalId, ProposalState _state) internal view returns (bool) {
         Proposal storage proposal_ = proposals[_proposalId];
-        return proposal_.state == ProposalState.Expired;
-    }
-
-    function _proposalIsBoosted(uint256 _proposalId) internal view returns (bool) {
-        Proposal storage proposal_ = proposals[_proposalId];
-        return proposal_.state = ProposalState.Boosted;
+        return proposal_.state == _state;
     }
 }
