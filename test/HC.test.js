@@ -25,13 +25,15 @@ describe('HolographicConsensus', () => {
         let stakeTokenContract;
         let votingContract;
 
+        const HOURS = 60 * 60;
         const SUPPORT_PERCENT = 51;
-        const QUEUE_PERIOD_SECS = 60;
-        const BOOST_PERIOD_SECS = 10;
-        const BOOST_PERIOD_EXTENSION_SECS = 5;
-        const PENDED_BOOST_PERIOD_SECS = 5;
-        const COMPENSATION_FEE_PERCENT = 1;
+        const QUEUE_PERIOD_SECS = 24 * HOURS;
+        const BOOST_PERIOD_SECS = 6 * HOURS;
+        const BOOST_PERIOD_EXTENSION_SECS = 0.25 * HOURS;
+        const PENDED_BOOST_PERIOD_SECS = 1 * HOURS;
+        const COMPENSATION_FEE_PERCENT = 10;
         const CONFIDENCE_THRESHOLD_BASE = 4;
+        const PRECISION_MULTIPLIER = 10 ** 16;
 
         beforeEach(async () => {
 
@@ -101,7 +103,7 @@ describe('HolographicConsensus', () => {
                 expect(event.returnValues._metadata).toBe(`DAOs should rule the world 2`);
             });
 
-            test('Allows to retrieve proposal structs', async () => {
+            test('The proposal should be created with expected parameters', async () => {
                 const proposal = await votingContract.methods.getProposal(2).call();
                 expect(proposal.id).toBe(`2`);
                 expect(proposal.state).toBe(`0`);
@@ -111,6 +113,7 @@ describe('HolographicConsensus', () => {
                 expect(proposal.downstake).toBe(`0`);
                 const startDateDeltaSecs = ( new Date().getTime() / 1000 ) - parseInt(proposal.startDate, 10);
                 expect(startDateDeltaSecs).toBeLessThan(2);
+                expect(proposal.lifetime).toBe(`${QUEUE_PERIOD_SECS}`);
             });
 
             describe('When voting on proposals (that have no stake)', () => {
@@ -272,6 +275,26 @@ describe('HolographicConsensus', () => {
                         )).toBe(true);
                     });
 
+                    test('Should not allow an account to withdraw tokens from a proposal that has no stake', async () => { expect(await reverts(
+                            votingContract.methods.unstake(0, 10, true).send({ ...txParams }),
+                            `VOTING_ERROR_SENDER_DOES_NOT_HAVE_REQUIRED_STAKE`
+                        )).toBe(true);
+                    });
+
+                    test('Should not allow an account to withdraw tokens that were not staked by the account', async () => {
+                        await votingContract.methods.stake(0, 1, true).send({ ...txParams });
+                        expect(await reverts(
+                            votingContract.methods.unstake(0, 1, true).send({ ...txParams, from: accounts[1] }),
+                            `VOTING_ERROR_SENDER_DOES_NOT_HAVE_REQUIRED_STAKE`
+                        )).toBe(true);
+                    });
+
+                    test('Can retrieve a proposals confidence factor', async () => {
+                        await votingContract.methods.stake(0, 10, true).send({ ...txParams, from: accounts[3] });
+                        await votingContract.methods.stake(0, 5, false).send({ ...txParams, from: accounts[4] });
+                        expect(await votingContract.methods.getConfidence(0).call()).toBe(`${2 * PRECISION_MULTIPLIER}`);
+                    });
+
                     test('Should allow staking and unstaking on proposals', async () => {
                         
                         // Stake tokens.
@@ -344,6 +367,82 @@ describe('HolographicConsensus', () => {
                         expect(votingBalance).toBe(`10`);
                     });
 
+                    test.todo('External callers should not be able to boost a proposal that hasn\'t gained enough confidence');
+
+                    describe('When proposals have enough confidence', () => {
+
+                        beforeEach(async () => {
+                            
+                            // Stake enough to reach the confidence factor.
+                            await votingContract.methods.stake(0, 40, true).send({ ...txParams, from: accounts[6] });
+                            await votingContract.methods.stake(0, 10, false).send({ ...txParams, from: accounts[7] });
+                        });
+
+                        it('Their state should be set to Pended', async () => {
+
+                            // Verify confidence.
+                            const confidence = await votingContract.methods.getConfidence(0).call();
+                            expect(confidence).toBe(`${4 * PRECISION_MULTIPLIER}`);
+
+                            // Retrieve the proposal and verify it's state.
+                            const proposal = await votingContract.methods.getProposal(0).call();
+                            expect(proposal.state).toBe(`2`); // ProposalState '2' = Pended
+                            const pendedDateDeltaSecs = ( new Date().getTime() / 1000 ) - parseInt(proposal.lastPendedDate, 10);
+                            expect(pendedDateDeltaSecs).toBeLessThan(2);
+                        }); 
+
+                        it('Their state should change to Unpended if confidence drops', async () => {
+
+                            // Downstake the proposal a bit to reduce confidence beneath the threshold.
+                            await votingContract.methods.stake(0, 10, false).send({ ...txParams, from: accounts[7] });
+                            
+                            // Verify that confidence dropped.
+                            const confidence = await votingContract.methods.getConfidence(0).call();
+                            expect(confidence).toBe(`${2 * PRECISION_MULTIPLIER}`);
+
+                            // Retrieve the proposal and verify it's state.
+                            const proposal = await votingContract.methods.getProposal(0).call();
+                            expect(proposal.state).toBe(`1`); // ProposalState '1' = Unpended
+                            expect(proposal.lastPendedDate).toBe(`0`);
+                        }); 
+
+                        test.todo('External callers should not be able to boost a proposal that hasn\'t been pended for enough time');
+
+                        describe('When proposals have had enough confidence for a while', () => {
+                            
+                            beforeEach(async () => {
+                                
+                                // Advance enough time for a proposal to be boosted.
+                                await util.skipTime(PENDED_BOOST_PERIOD_SECS + 0.01 * HOURS);
+                            });
+
+                            test('An external caller should be able to boost the proposal and receive a compensation fee', async () => {
+
+                                // Record the caller's current stake token balance
+                                // to later verify that it has received a compensation fee for the call.
+                                const balance = await stakeTokenContract.methods.balanceOf(accounts[0]).call();
+
+                                // Boost the proposal.
+                                await votingContract.methods.boostProposal(0).send({ ...txParams });
+
+                                // Verify the proposal's state.
+                                const proposal = await votingContract.methods.getProposal(0).call();
+                                expect(proposal.state).toBe(`3`); // ProposalState '3' = Boosted
+                                expect(proposal.lastPendedDate).toBe(`0`);
+
+                                // Verify that the proposal's lifetime has changed to boostPeriod.
+                                expect(proposal.lifetime).toBe(`${BOOST_PERIOD_SECS}`);
+
+                                // Verify that the coller received a compensation fee.
+                                const newBalance = await stakeTokenContract.methods.balanceOf(accounts[0]).call();
+                                console.log(`newBalance`, newBalance);
+                                expect(parseInt(newBalance, 10)).toBeGreaterThan(parseInt(balance, 10));
+                            });
+
+                            test.todo('An external caller shouldn\'t be able to boost a proposal once it has already been boosted');
+
+                        }); // When proposals have had enough confidence for a while
+                    }); // When proposals have enough confidence
                 }); // When staking on proposals
             }); // When voting on proposals
         }); // When creating proposals

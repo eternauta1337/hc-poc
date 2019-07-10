@@ -12,7 +12,7 @@ contract HCStaking is HCVoting {
 
     // Confidence threshold.
     // A proposal can be boosted if it's confidence, determined by staking, is above this threshold.
-    uint256 confidenceThresholdBase;
+    uint256 public confidenceThresholdBase;
 
     // Events.
     event UpstakeProposal(uint256 indexed _proposalId, address indexed _staker, uint256 _amount);
@@ -125,8 +125,8 @@ contract HCStaking is HCVoting {
     function getConfidence(uint256 _proposalId) public view returns (uint256 _confidence) {
         require(_proposalExists(_proposalId), ERROR_PROPOSAL_DOES_NOT_EXIST);
         Proposal storage proposal_ = proposals[_proposalId];
-        // TODO: What happens when there is no downstake (division by 0).
-        _confidence = proposal_.upstake.mul(PRECISION_MULTIPLIER) / proposal_.downstake;
+        if(proposal_.downstake == 0) _confidence = proposal_.upstake.mul(PRECISION_MULTIPLIER);
+        else _confidence = proposal_.upstake.mul(PRECISION_MULTIPLIER) / proposal_.downstake;
     }
 
     /*
@@ -146,9 +146,12 @@ contract HCStaking is HCVoting {
         }
 		else {
 			if(proposal_.state == ProposalState.Pended) {
+                proposal_.lastPendedDate = 0;
                 _updateProposalState(_proposalId, ProposalState.Unpended);
 			}
 		}
+
+        // TODO: Shouldn't we be able to also automatically boost proposals here?
     }
 
     /*
@@ -156,9 +159,7 @@ contract HCStaking is HCVoting {
      */
 
     function _proposalHasEnoughConfidence(Proposal storage proposal_) internal view returns (bool _hasConfidence) {
-        uint256 currentConfidence;
-        if(proposal_.downstake == 0) currentConfidence = proposal_.upstake.mul(PRECISION_MULTIPLIER);
-        else currentConfidence = proposal_.upstake.mul(PRECISION_MULTIPLIER) / proposal_.downstake;
+        uint256 currentConfidence = getConfidence(proposal_.id);
         // TODO: The threshold should be elevated to the power of the number of currently boosted proposals.
         uint256 confidenceThreshold = confidenceThresholdBase.mul(PRECISION_MULTIPLIER);
         _hasConfidence = currentConfidence >= confidenceThreshold;

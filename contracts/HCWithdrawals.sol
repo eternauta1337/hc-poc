@@ -23,7 +23,7 @@ contract HCWithdrawals is HCCompensations {
         // Callculate the staker's final payout, by subtracting the
         // expiration call fee proportionally to the amount of stake that the user made.
         // TODO: fee might change by this time, better to store it in the proposal data structure
-        uint256 compensationFee = _calculateCompensationFee(_proposalId);
+        uint256 compensationFee = _calculateCompensationFee(_proposalId, proposal_.startDate.add(proposal_.lifetime));
         uint256 totalStake = proposal_.upstake.add(proposal_.downstake);
         uint256 senderTotalStakeRatio = senderTotalStake.mul(PRECISION_MULTIPLIER) / totalStake;
         uint256 senderFeeContribution = senderTotalStakeRatio.mul(compensationFee) / PRECISION_MULTIPLIER;
@@ -60,7 +60,7 @@ contract HCWithdrawals is HCCompensations {
 
         // Calculate the sender's reward.
         // TODO: see same case above, this could change
-        uint256 compensationFee = _calculateCompensationFee(_proposalId);
+        uint256 compensationFee = _calculateCompensationFee(_proposalId, proposal_.startDate.add(proposal_.lifetime));
         uint256 totalWinningStake = supported ? proposal_.upstake : proposal_.downstake;
         uint256 totalLosingStake = supported ? proposal_.downstake : proposal_.upstake;
         totalLosingStake = totalLosingStake.sub(compensationFee);

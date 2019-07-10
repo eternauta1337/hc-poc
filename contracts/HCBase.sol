@@ -111,6 +111,7 @@ contract HCBase {
     string internal constant ERROR_VOTING_DOES_NOT_HAVE_ENOUGH_FUNDS         = "VOTING_ERROR_VOTING_DOES_NOT_HAVE_ENOUGH_FUNDS";
     string internal constant ERROR_PROPOSAL_IS_ACTIVE                        = "VOTING_ERROR_PROPOSAL_IS_ACTIVE";
     string internal constant ERROR_NO_STAKE_TO_WITHDRAW                      = "VOTING_ERROR_NO_STAKE_TO_WITHDRAW";
+    string internal constant ERROR_INVALID_COMPENSATION_FEE                  = "VOTING_ERROR_INVALID_COMPENSATION_FEE";
 
     /*
      * External functions.
@@ -126,6 +127,7 @@ contract HCBase {
         Proposal storage proposal_ = proposals[proposalId];
         proposal_.id = proposalId;
         proposal_.startDate = now;
+        proposal_.lifetime = queuePeriod;
 
         emit ProposalCreated(proposalId, msg.sender, _metadata);
     }

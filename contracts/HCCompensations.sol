@@ -17,7 +17,7 @@ contract HCCompensations is HCStaking {
         require(now >= proposal_.startDate.add(proposal_.lifetime), ERROR_PROPOSAL_IS_ACTIVE);
 
         // Compensate the caller.
-        uint256 fee = _calculateCompensationFee(_proposalId);
+        uint256 fee = _calculateCompensationFee(_proposalId, proposal_.startDate.add(proposal_.lifetime));
         require(stakeToken.balanceOf(address(this)) >= fee, ERROR_VOTING_DOES_NOT_HAVE_ENOUGH_FUNDS);
         stakeToken.transfer(msg.sender, fee);
 
@@ -35,7 +35,7 @@ contract HCCompensations is HCStaking {
         require(now >= proposal_.startDate.add(proposal_.lifetime), ERROR_PROPOSAL_IS_ACTIVE);
 
         // Compensate the caller.
-        uint256 fee = _calculateCompensationFee(_proposalId);
+        uint256 fee = _calculateCompensationFee(_proposalId, proposal_.startDate.add(proposal_.lifetime));
         require(stakeToken.balanceOf(address(this)) >= fee, ERROR_VOTING_DOES_NOT_HAVE_ENOUGH_FUNDS);
         stakeToken.transfer(msg.sender, fee);
 
@@ -48,6 +48,7 @@ contract HCCompensations is HCStaking {
         // TODO: Different errors for these
         require(!_proposalStateIs(_proposalId, ProposalState.Expired), ERROR_PROPOSAL_IS_CLOSED);
         require(!_proposalStateIs(_proposalId, ProposalState.Resolved), ERROR_PROPOSAL_IS_CLOSED);
+        require(!_proposalStateIs(_proposalId, ProposalState.Boosted), ERROR_PROPOSAL_IS_BOOSTED);
 
         // Require that the proposal is currently pended.
         Proposal storage proposal_ = proposals[_proposalId];
@@ -58,27 +59,36 @@ contract HCCompensations is HCStaking {
         require(now >= proposal_.lastPendedDate.add(pendedBoostPeriod), ERROR_PROPOSAL_HASNT_HAD_CONFIDENCE_ENOUGH_TIME);
 
         // Compensate the caller.
-        uint256 fee = _calculateCompensationFee(_proposalId);
+        uint256 fee = _calculateCompensationFee(_proposalId, proposal_.lastPendedDate.add(pendedBoostPeriod));
         require(stakeToken.balanceOf(address(this)) >= fee, ERROR_VOTING_DOES_NOT_HAVE_ENOUGH_FUNDS);
         stakeToken.transfer(msg.sender, fee);
 
         // Boost the proposal.
         _updateProposalState(_proposalId, ProposalState.Boosted);
         proposal_.lifetime = boostPeriod;
+        proposal_.lastPendedDate = 0;
     }
 
     /*
      * Utility functions.
      */
 
-    function _calculateCompensationFee(uint256 _proposalId) internal view returns(uint256 _fee) {
+    function _calculateCompensationFee(uint256 _proposalId, uint256 _cutoffDate) internal view returns(uint256 _fee) {
 
         // Require that the proposal has potentially expired.
+        // This is necessary because the fee depends on the time since expiration.
+        // If the proposal hasn't expired, the calculation would yield a negative fee.
         Proposal storage proposal_ = proposals[_proposalId];
-        require(now >= proposal_.startDate.add(proposal_.lifetime), ERROR_PROPOSAL_IS_ACTIVE);
+        require(now >= _cutoffDate, ERROR_INVALID_COMPENSATION_FEE);
 
         // Calculate fee.
-        uint256 timeSinceExpiration = now.sub(proposal_.startDate.add(proposal_.lifetime));
-        _fee = timeSinceExpiration / compensationFeePct.mul(proposal_.upstake);
+        uint256 timeSinceExpiration = now.sub(_cutoffDate);
+        uint256 upstakePortion = proposal_.upstake.mul(PRECISION_MULTIPLIER) / compensationFeePct;
+        _fee = timeSinceExpiration.mul(PRECISION_MULTIPLIER) / upstakePortion;
+
+        // Cap the fee to a maximum of compensationFeePct * total upstake.
+        if(_fee.mul(PRECISION_MULTIPLIER) > upstakePortion) {
+            _fee = upstakePortion / PRECISION_MULTIPLIER;
+        }
     }
 }
