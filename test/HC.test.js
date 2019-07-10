@@ -25,7 +25,6 @@ describe('HolographicConsensus', () => {
         let stakeTokenContract;
         let votingContract;
         let elapsedTime = 0;
-        let timeSkips = 0;
 
         const HOURS = 60 * 60;
         const SUPPORT_PERCENT = 51;
@@ -90,6 +89,9 @@ describe('HolographicConsensus', () => {
                     ).send({ ...txParams });
                     proposalCreationReceipts.push(receipt);
                 }
+
+                // Reset elapsed time since proposals will have startDate set to now.
+                elapsedTime = 0;
             });
 
             test('numProposals should increase', async () => {
@@ -421,14 +423,9 @@ describe('HolographicConsensus', () => {
                                 // Advance enough time for a proposal to be boosted.
                                 // Note that a little extra time is advanced, that's because compensation fees
                                 // are proportional to that extra time, and having no extra time would result in fees of value 0.
-                                if(timeSkips === 0) {
-                                    const time = PENDED_BOOST_PERIOD_SECS + 0.01 * HOURS;
-                                    elapsedTime += time;
-                                    console.log(`Skip time 1`);
-                                    await util.advanceTimeAndBlock(time);
-                                    timeSkips++;
-                                    console.log(`elapsedTime`, elapsedTime);
-                                }
+                                const time = PENDED_BOOST_PERIOD_SECS + 0.01 * HOURS;
+                                elapsedTime += time;
+                                await util.advanceTimeAndBlock(time);
                             });
 
                             test('An external caller should be able to boost the proposal and receive a compensation fee', async () => {
@@ -473,14 +470,9 @@ describe('HolographicConsensus', () => {
                                     beforeEach(async () => {
                                         
                                         // Advance enough time for a proposal to be boosted.
-                                        if(timeSkips === 1) {
-                                            const time = BOOST_PERIOD_SECS - elapsedTime - QUIET_ENDING_PERIOD_SECS * 0.5;
-                                            elapsedTime += time;
-                                            console.log(`Skip time 2`);
-                                            await util.advanceTimeAndBlock(time);
-                                            timeSkips++;
-                                            console.log(`elapsedTime`, elapsedTime);
-                                        }
+                                        const time = BOOST_PERIOD_SECS - elapsedTime - QUIET_ENDING_PERIOD_SECS * 0.5;
+                                        elapsedTime += time;
+                                        await util.advanceTimeAndBlock(time);
                                     });
 
                                     test('A decision flip near the end of the proposal should extend its boosted lifetime', async () => {
@@ -506,14 +498,9 @@ describe('HolographicConsensus', () => {
                                             // Advance enough time for a proposal to be boosted.
                                             // Note that a little extra time is advanced, that's because compensation fees
                                             // are proportional to that extra time, and having no extra time would result in fees of value 0.
-                                            if(timeSkips === 2) {
-                                                const time = BOOST_PERIOD_SECS - elapsedTime + 2 * HOURS;
-                                                elapsedTime += time;
-                                                console.log(`Skip time 3`);
-                                                await util.advanceTimeAndBlock(time);
-                                                timeSkips++;
-                                                console.log(`elapsedTime`, elapsedTime);
-                                            }
+                                            const time = BOOST_PERIOD_SECS - elapsedTime + 2 * HOURS;
+                                            elapsedTime += time;
+                                            await util.advanceTimeAndBlock(time);
                                         });
                                         
                                         test('Proposals should be resolvable by relative consensus', async () => {
@@ -524,23 +511,20 @@ describe('HolographicConsensus', () => {
 
                                             // Have an external caller resolve the boosted proposal.
                                             const receipt = await votingContract.methods.resolveBoostedProposal(0).send({ ...txParams });
-                                            console.log(`receipt`, JSON.stringify(receipt, null, 2));
 
                                             // Verify that a proposal state change event was emitted.
-                                            // const event = receipt.events.ProposalStateChanged;
-                                            // expect(event).not.toBeNull();
-                                            // expect(event.returnValues._proposalId).toBe(`0`);
-                                            // expect(event.returnValues._newState).toBe(`4`); // ProposalState '4' = Resolved
+                                            const event = receipt.events.ProposalStateChanged;
+                                            expect(event).not.toBeNull();
+                                            expect(event.returnValues._proposalId).toBe(`0`);
+                                            expect(event.returnValues._newState).toBe(`4`); // ProposalState '4' = Resolved
                                             
                                             // Verify that the state of the proposal was changed.
                                             const proposal = await votingContract.methods.getProposal(0).call();
-                                            console.log(proposal);
-                                            console.log(`elapsed`, elapsedTime);
-                                            // expect(proposal.state).toBe(`4`);
+                                            expect(proposal.state).toBe(`4`);
                                             
                                             // Verify that the caller was compensated.
-                                            // const newBalance = await stakeTokenContract.methods.balanceOf(accounts[0]).call();
-                                            // expect(parseInt(newBalance, 10)).toBeGreaterThan(parseInt(balance, 10));
+                                            const newBalance = await stakeTokenContract.methods.balanceOf(accounts[0]).call();
+                                            expect(parseInt(newBalance, 10)).toBeGreaterThan(parseInt(balance, 10));
                                         });
 
                                     }); // When the boost period has elapsed
