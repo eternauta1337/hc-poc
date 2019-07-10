@@ -272,7 +272,7 @@ describe('HolographicConsensus', () => {
                         )).toBe(true);
                     });
 
-                    test.only('Should allow staking on proposals', async () => {
+                    test('Should allow staking and unstaking on proposals', async () => {
                         
                         // Stake tokens.
                         const upstakeReceipt = await votingContract.methods.stake(0, 10, true).send({ ...txParams, from: accounts[6] });
@@ -300,18 +300,48 @@ describe('HolographicConsensus', () => {
                         expect(proposal.downstake).toBe(`10`);
      
                         // Verify that the proposal registers the sender's stake.
-                        const upstake = await votingContract.methods.getUpstake(0, accounts[6]).call();
+                        let upstake = await votingContract.methods.getUpstake(0, accounts[6]).call();
                         expect(upstake).toBe(`15`);
-                        const downstake = await votingContract.methods.getDownstake(0, accounts[6]).call();
+                        let downstake = await votingContract.methods.getDownstake(0, accounts[6]).call();
                         expect(downstake).toBe(`10`);
                         
                         // Verify that the owner's stake token balance decreased.
-                        const stakerBalance = await stakeTokenContract.methods.balanceOf(accounts[6]).call();
+                        let stakerBalance = await stakeTokenContract.methods.balanceOf(accounts[6]).call();
                         expect(stakerBalance).toBe(`75`);
 
                         // Verify that the voting contract now holds the staked tokens.
-                        const votingBalance = await stakeTokenContract.methods.balanceOf(votingContract.options.address).call();
+                        let votingBalance = await stakeTokenContract.methods.balanceOf(votingContract.options.address).call();
                         expect(votingBalance).toBe(`25`);
+                        
+                        // Retrieve stake.
+                        const unUpstakeReceipt = await votingContract.methods.unstake(0, 10, true).send({ ...txParams, from: accounts[6] });
+                        const unDownstakeReceipt = await votingContract.methods.unstake(0, 5, false).send({ ...txParams, from: accounts[6] });
+
+                        // Verify that the proper events were triggered.
+                        event = unUpstakeReceipt.events.WithdrawUpstake;
+                        expect(event).not.toBeNull();
+                        expect(event.returnValues._proposalId).toBe(`0`);
+                        expect(event.returnValues._staker).toBe(accounts[6]);
+                        expect(event.returnValues._amount).toBe(`10`);
+                        event = unDownstakeReceipt.events.WithdrawDownstake;
+                        expect(event).not.toBeNull();
+                        expect(event.returnValues._proposalId).toBe(`0`);
+                        expect(event.returnValues._staker).toBe(accounts[6]);
+                        expect(event.returnValues._amount).toBe(`5`);
+                        
+                        // Verify that the proposal registers the new sender's stake.
+                        upstake = await votingContract.methods.getUpstake(0, accounts[6]).call();
+                        expect(upstake).toBe(`5`);
+                        downstake = await votingContract.methods.getDownstake(0, accounts[6]).call();
+                        expect(downstake).toBe(`5`);
+                        
+                        // Verify that the staker retrieved the tokens.
+                        stakerBalance = await stakeTokenContract.methods.balanceOf(accounts[6]).call();
+                        expect(stakerBalance).toBe(`90`);
+
+                        // Verify that the voting contract lost the tokens payed out to the staker.
+                        votingBalance = await stakeTokenContract.methods.balanceOf(votingContract.options.address).call();
+                        expect(votingBalance).toBe(`10`);
                     });
 
                 }); // When staking on proposals
