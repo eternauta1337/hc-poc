@@ -451,8 +451,10 @@ describe('HolographicConsensus', () => {
                         beforeEach(async () => {
                             
                             // Stake enough to reach the confidence factor.
-                            await votingContract.methods.stake(0, 40000, true).send({ ...txParams, from: accounts[6] });
-                            await votingContract.methods.stake(0, 10000, false).send({ ...txParams, from: accounts[7] });
+                            await votingContract.methods.stake(0, 20000, true).send({ ...txParams, from: accounts[6] });
+                            await votingContract.methods.stake(0, 20000, true).send({ ...txParams, from: accounts[7] });
+                            await votingContract.methods.stake(0, 5000, false).send({ ...txParams, from: accounts[4] });
+                            await votingContract.methods.stake(0, 5000, false).send({ ...txParams, from: accounts[5] });
                         });
 
                         it('Their state should be set to Pended', async () => {
@@ -592,6 +594,21 @@ describe('HolographicConsensus', () => {
                                             // Verify that the caller was compensated.
                                             const newBalance = await stakeTokenContract.methods.balanceOf(accounts[0]).call();
                                             expect(parseInt(newBalance, 10)).toBeGreaterThan(parseInt(balance, 10));
+                                        });
+
+                                        // TODO: This same test should be performed on a non boosted proposal that was resolved with abs majority.
+                                        test('Winning stakers should be able to withdraw their reward on a proposal resolved by relative majority', async () => {
+                                            
+                                            // Have an external caller resolve the boosted proposal.
+                                            await votingContract.methods.resolveBoostedProposal(0).send({ ...txParams });
+
+                                            // Withdraw reward.
+                                            await votingContract.methods.withdrawRewardFromResolvedProposal(0).send({ ...txParams, from: accounts[6] });
+                                            await votingContract.methods.withdrawRewardFromResolvedProposal(0).send({ ...txParams, from: accounts[7] });
+
+                                            // Verify that the winning staker has recovered the stake + the reward.
+                                            expect(await stakeTokenContract.methods.balanceOf(accounts[6]).call()).toBe(`105000`);
+                                            expect(await stakeTokenContract.methods.balanceOf(accounts[7]).call()).toBe(`105000`);
                                         });
 
                                     }); // When the boost period has elapsed

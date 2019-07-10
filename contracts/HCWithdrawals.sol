@@ -34,11 +34,9 @@ contract HCWithdrawals is HCCompensations {
 
     }
 
-    // TODO: What about proposals that are resolved with abs maj? Review doc
-    function withdrawRewardFromResolvedBoostedProposal(uint256 _proposalId) public {
+    function withdrawRewardFromResolvedProposal(uint256 _proposalId) public {
         require(_proposalExists(_proposalId), ERROR_PROPOSAL_DOES_NOT_EXIST);
         require(_proposalStateIs(_proposalId, ProposalState.Resolved), ERROR_PROPOSAL_IS_ACTIVE);
-        require(_proposalStateIs(_proposalId, ProposalState.Boosted), ERROR_PROPOSAL_IS_NOT_BOOSTED);
 
         // Get proposal outcome.
         Proposal storage proposal_ = proposals[_proposalId];
