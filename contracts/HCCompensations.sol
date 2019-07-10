@@ -7,6 +7,9 @@ contract HCCompensations is HCStaking {
     /*
      * External functions.
      */
+
+    // TODO: Remove!
+    event LogTime(uint256 _now, uint256 _targetTime);
     
     function resolveBoostedProposal(uint256 _proposalId) public {
         require(_proposalExists(_proposalId), ERROR_PROPOSAL_DOES_NOT_EXIST);
@@ -14,15 +17,16 @@ contract HCCompensations is HCStaking {
 
         // Verify that the proposal lifetime has ended.
         Proposal storage proposal_ = proposals[_proposalId];
-        require(now >= proposal_.startDate.add(proposal_.lifetime), ERROR_PROPOSAL_IS_ACTIVE);
+        emit LogTime(now, proposal_.startDate.add(proposal_.lifetime));
+        // require(now >= proposal_.startDate.add(proposal_.lifetime), ERROR_PROPOSAL_IS_ACTIVE);
 
         // Compensate the caller.
-        uint256 fee = _calculateCompensationFee(_proposalId, proposal_.startDate.add(proposal_.lifetime));
-        require(stakeToken.balanceOf(address(this)) >= fee, ERROR_VOTING_DOES_NOT_HAVE_ENOUGH_FUNDS);
-        stakeToken.transfer(msg.sender, fee);
+        // uint256 fee = _calculateCompensationFee(_proposalId, proposal_.startDate.add(proposal_.lifetime));
+        // require(stakeToken.balanceOf(address(this)) >= fee, ERROR_VOTING_DOES_NOT_HAVE_ENOUGH_FUNDS);
+        // stakeToken.transfer(msg.sender, fee);
 
         // Resolve the proposal.
-        _updateProposalState(_proposalId, ProposalState.Resolved);
+        // _updateProposalState(_proposalId, ProposalState.Resolved);
     }
 
     function expireNonBoostedProposal(uint256 _proposalId) public {

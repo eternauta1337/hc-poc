@@ -6,7 +6,7 @@
   "scripts": {
     "ganache": "ganache-cli --deterministic",
     "compile": "node ./scripts/compile.js",
-    "test": "jest --verbose"
+    "test": "jest --verbose --runInBand"
   },
   "repository": {
     "type": "git",

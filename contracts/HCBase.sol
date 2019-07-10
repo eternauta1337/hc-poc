@@ -75,7 +75,7 @@ contract HCBase {
     // Note: The effective lifetime of a proposal when it is boosted is dynamic, and can be extended
     // due to the requirement of quiet endings.
     uint256 public boostPeriod;
-    uint256 public boostPeriodExtension;
+    uint256 public quietEndingPeriod;
 
     // Time for a pended proposal to become boosted if it maintained confidence within such period.
     uint256 public pendedBoostPeriod;

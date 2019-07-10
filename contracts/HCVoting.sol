@@ -15,6 +15,7 @@ contract HCVoting is HCBase {
 
     // Events.
     event VoteCasted(uint256 indexed _proposalId, address indexed _voter, bool _supports, uint256 _stake);
+    event ProposalLifetimeExtended(uint256 indexed _proposalId, uint256 _newLifetime);
   
     /*
      * External functions.
@@ -26,7 +27,7 @@ contract HCVoting is HCBase {
         uint256 _supportPct,
         uint256 _queuePeriod,
         uint256 _boostPeriod,
-        uint256 _boostPeriodExtension,
+        uint256 _quietEndingPeriod,
         uint256 _compensationFeePct
     ) 
         public
@@ -43,7 +44,7 @@ contract HCVoting is HCBase {
         // TODO: Require min periods?
         queuePeriod = _queuePeriod;
         boostPeriod = _boostPeriod;
-        boostPeriodExtension= _boostPeriodExtension;
+        quietEndingPeriod= _quietEndingPeriod;
 
         // Assign fees.
         // TODO: Contain?
@@ -128,7 +129,8 @@ contract HCVoting is HCBase {
             if(newSupport != currentSupport) {
                 proposal_.lastRelativeSupportFlipDate = now;
                 proposal_.lastRelativeSupport = newSupport;
-                proposal_.lifetime = proposal_.lifetime.add(boostPeriodExtension);
+                proposal_.lifetime = proposal_.lifetime.add(quietEndingPeriod);
+                emit ProposalLifetimeExtended(_proposalId, proposal_.lifetime);
             }
         }
     }
