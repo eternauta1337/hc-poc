@@ -146,7 +146,6 @@ contract HCStaking is HCVoting {
         }
 		else {
 			if(proposal_.state == ProposalState.Pended) {
-                proposal_.lastPendedDate = 0;
                 _updateProposalState(_proposalId, ProposalState.Unpended);
 			}
 		}

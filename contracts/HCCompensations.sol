@@ -69,7 +69,6 @@ contract HCCompensations is HCStaking {
         // Boost the proposal.
         _updateProposalState(_proposalId, ProposalState.Boosted);
         proposal_.lifetime = boostPeriod;
-        proposal_.lastPendedDate = 0;
     }
 
     /*
@@ -85,14 +84,18 @@ contract HCCompensations is HCStaking {
         require(now >= _cutoffDate, ERROR_INVALID_COMPENSATION_FEE);
 
         // Calculate fee.
-        // TODO: This will throw for proposals that have no stake (division by zero).
-        uint256 timeSinceExpiration = now.sub(_cutoffDate);
-        uint256 upstakePortion = proposal_.upstake.mul(PRECISION_MULTIPLIER) / compensationFeePct;
-        _fee = timeSinceExpiration.mul(PRECISION_MULTIPLIER) / upstakePortion;
-
-        // Cap the fee to a maximum of compensationFeePct * total upstake.
-        if(_fee.mul(PRECISION_MULTIPLIER) > upstakePortion) {
-            _fee = upstakePortion / PRECISION_MULTIPLIER;
-        }
+        /* 
+           fee
+           ^
+           |     ___________ max = compensationFeePct * total upstake
+           |    /
+           |   /
+           |  /
+           | /
+           |/______________> time elapsed since resolution
+        */
+        _fee = now.sub(_cutoffDate).div(compensationFeePct);
+        uint256 max = proposal_.upstake.mul(PRECISION_MULTIPLIER).div(compensationFeePct);
+        if(_fee.mul(PRECISION_MULTIPLIER) > max) _fee = max.div(PRECISION_MULTIPLIER);
     }
 }

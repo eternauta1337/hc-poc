@@ -35,6 +35,7 @@ describe('HolographicConsensus', () => {
         const COMPENSATION_FEE_PERCENT = 10;
         const CONFIDENCE_THRESHOLD_BASE = 4;
         const PRECISION_MULTIPLIER = 10 ** 16;
+        const INITIAL_VOTING_STAKE_TOKEN_BALANCE = 100000000000;
 
         beforeEach(async () => {
 
@@ -249,7 +250,7 @@ describe('HolographicConsensus', () => {
 
                         // Mint some tokens to the voting contract.
                         // These will be used to auto-downstake proposals and pay compensation fees.
-                        await stakeTokenContract.methods.mint(votingContract.options.address, 1000000000000000).send({ ...txParams });
+                        await stakeTokenContract.methods.mint(votingContract.options.address, INITIAL_VOTING_STAKE_TOKEN_BALANCE).send({ ...txParams });
 
                         // All stakers give 'infinite' allowance to the contract.
                         // Note: In practice, a staker will need to either atomically provide allowance
@@ -315,12 +316,12 @@ describe('HolographicConsensus', () => {
                         expect(event).not.toBeNull();
                         expect(event.returnValues._proposalId).toBe(`0`);
                         expect(event.returnValues._staker).toBe(accounts[6]);
-                        expect(event.returnValues._amount).toBe(`10`);
+                        expect(event.returnValues._amount).toBe(`10000`);
                         event = downstakeReceipt.events.DownstakeProposal;
                         expect(event).not.toBeNull();
                         expect(event.returnValues._proposalId).toBe(`0`);
                         expect(event.returnValues._staker).toBe(accounts[6]);
-                        expect(event.returnValues._amount).toBe(`5`);
+                        expect(event.returnValues._amount).toBe(`5000`);
 
                         // Stake some more.
                         await votingContract.methods.stake(0, 5000, true).send({ ...txParams, from: accounts[6] });
@@ -328,22 +329,22 @@ describe('HolographicConsensus', () => {
 
                         // Verify that the proposal received the stake.
                         const proposal = await votingContract.methods.getProposal(0).call();
-                        expect(proposal.upstake).toBe(`15`);
-                        expect(proposal.downstake).toBe(`10`);
+                        expect(proposal.upstake).toBe(`15000`);
+                        expect(proposal.downstake).toBe(`10000`);
      
                         // Verify that the proposal registers the sender's stake.
                         let upstake = await votingContract.methods.getUpstake(0, accounts[6]).call();
-                        expect(upstake).toBe(`15`);
+                        expect(upstake).toBe(`15000`);
                         let downstake = await votingContract.methods.getDownstake(0, accounts[6]).call();
-                        expect(downstake).toBe(`10`);
+                        expect(downstake).toBe(`10000`);
                         
                         // Verify that the owner's stake token balance decreased.
                         let stakerBalance = await stakeTokenContract.methods.balanceOf(accounts[6]).call();
-                        expect(stakerBalance).toBe(`75`);
+                        expect(stakerBalance).toBe(`75000`);
 
                         // Verify that the voting contract now holds the staked tokens.
                         let votingBalance = await stakeTokenContract.methods.balanceOf(votingContract.options.address).call();
-                        expect(votingBalance).toBe(`25`);
+                        expect(votingBalance).toBe(`${INITIAL_VOTING_STAKE_TOKEN_BALANCE + 25000}`);
                         
                         // Retrieve stake.
                         const unUpstakeReceipt = await votingContract.methods.unstake(0, 10000, true).send({ ...txParams, from: accounts[6] });
@@ -354,26 +355,26 @@ describe('HolographicConsensus', () => {
                         expect(event).not.toBeNull();
                         expect(event.returnValues._proposalId).toBe(`0`);
                         expect(event.returnValues._staker).toBe(accounts[6]);
-                        expect(event.returnValues._amount).toBe(`10`);
+                        expect(event.returnValues._amount).toBe(`10000`);
                         event = unDownstakeReceipt.events.WithdrawDownstake;
                         expect(event).not.toBeNull();
                         expect(event.returnValues._proposalId).toBe(`0`);
                         expect(event.returnValues._staker).toBe(accounts[6]);
-                        expect(event.returnValues._amount).toBe(`5`);
+                        expect(event.returnValues._amount).toBe(`5000`);
                         
                         // Verify that the proposal registers the new sender's stake.
                         upstake = await votingContract.methods.getUpstake(0, accounts[6]).call();
-                        expect(upstake).toBe(`5`);
+                        expect(upstake).toBe(`5000`);
                         downstake = await votingContract.methods.getDownstake(0, accounts[6]).call();
-                        expect(downstake).toBe(`5`);
+                        expect(downstake).toBe(`5000`);
                         
                         // Verify that the staker retrieved the tokens.
                         stakerBalance = await stakeTokenContract.methods.balanceOf(accounts[6]).call();
-                        expect(stakerBalance).toBe(`90`);
+                        expect(stakerBalance).toBe(`90000`);
 
                         // Verify that the voting contract lost the tokens payed out to the staker.
                         votingBalance = await stakeTokenContract.methods.balanceOf(votingContract.options.address).call();
-                        expect(votingBalance).toBe(`10`);
+                        expect(votingBalance).toBe(`${INITIAL_VOTING_STAKE_TOKEN_BALANCE + 10000}`);
                     });
 
                     test.todo('External callers should not be able to boost a proposal that hasn\'t gained enough confidence');
@@ -416,7 +417,7 @@ describe('HolographicConsensus', () => {
                             expect(parseInt(newBalance, 10)).toBeGreaterThan(parseInt(balance, 10));
                         });
 
-                        test.only('Stakers should be able to withdraw their stake from an expired proposal', async () => {
+                        test('Stakers should be able to withdraw their stake from an expired proposal', async () => {
                             
                             // Add some stake to the proposal so that fee's can be obtained by external callers.
                             await votingContract.methods.stake(0, 10000, true).send({ ...txParams, from: accounts[3] });
@@ -449,13 +450,9 @@ describe('HolographicConsensus', () => {
 
                         beforeEach(async () => {
                             
-                            // Stake enough to reach the confidence factor in proposal 0.
+                            // Stake enough to reach the confidence factor.
                             await votingContract.methods.stake(0, 40000, true).send({ ...txParams, from: accounts[6] });
                             await votingContract.methods.stake(0, 10000, false).send({ ...txParams, from: accounts[7] });
-
-                            // Stake enough to reach the confidence factor in proposal 1.
-                            await votingContract.methods.stake(1, 40000, true).send({ ...txParams, from: accounts[6] });
-                            await votingContract.methods.stake(1, 10000, false).send({ ...txParams, from: accounts[7] });
                         });
 
                         it('Their state should be set to Pended', async () => {
@@ -483,7 +480,6 @@ describe('HolographicConsensus', () => {
                             // Retrieve the proposal and verify it's state.
                             const proposal = await votingContract.methods.getProposal(0).call();
                             expect(proposal.state).toBe(`1`); // ProposalState '1' = Unpended
-                            expect(proposal.lastPendedDate).toBe(`0`);
                         }); 
 
                         test.todo('External callers should not be able to boost a proposal that hasn\'t been pended for enough time');
@@ -495,7 +491,7 @@ describe('HolographicConsensus', () => {
                                 // Advance enough time for a proposal to be boosted.
                                 // Note that a little extra time is advanced, that's because compensation fees
                                 // are proportional to that extra time, and having no extra time would result in fees of value 0.
-                                const time = PENDED_BOOST_PERIOD_SECS + 0.01 * HOURS;
+                                const time = PENDED_BOOST_PERIOD_SECS + 2 * HOURS;
                                 elapsedTime += time;
                                 await util.advanceTimeAndBlock(time);
                             });
@@ -512,7 +508,6 @@ describe('HolographicConsensus', () => {
                                 // Verify the proposal's state.
                                 const proposal = await votingContract.methods.getProposal(0).call();
                                 expect(proposal.state).toBe(`3`); // ProposalState '3' = Boosted
-                                expect(proposal.lastPendedDate).toBe(`0`);
 
                                 // Verify that the proposal's lifetime has changed to boostPeriod.
                                 expect(proposal.lifetime).toBe(`${BOOST_PERIOD_SECS}`);

@@ -16,8 +16,8 @@ contract HCBase {
     // Expired: A proposal that expired, due to lack of resolution either by queuePeriod or boostPeriod elapsing.
     enum ProposalState { Queued, Unpended, Pended, Boosted, Resolved, Expired }
 
-    // Proposal data structure.
     struct Proposal {
+    // Proposal data structure.
         uint256 id;
         ProposalState state;
         uint256 lifetime;
@@ -87,7 +87,7 @@ contract HCBase {
     uint256 public compensationFeePct;
 
     // Multiplier used to avoid losing precision when using division or calculating percentages.
-    uint256 internal constant PRECISION_MULTIPLIER = 10 ** 18;
+    uint256 internal constant PRECISION_MULTIPLIER = 10 ** 16;
 
     // Events.
     event ProposalCreated(uint256 indexed _proposalId, address indexed _creator, string _metadata);
