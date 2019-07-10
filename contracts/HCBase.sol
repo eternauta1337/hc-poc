@@ -25,6 +25,7 @@ contract HCBase {
         uint256 lastPendedDate;
         uint256 lastRelativeSupportFlipDate;
         VoteState lastRelativeSupport;
+        uint256 resolutionCompensationFee;
         uint256 yea;
         uint256 nay;
         uint256 upstake;
@@ -42,6 +43,7 @@ contract HCBase {
         uint256 lastPendedDate,
         uint256 lastRelativeSupportFlipDate,
         VoteState lastRelativeSupport,
+        uint256 resolutionCompensationFee,
         uint256 yea,
         uint256 nay,
         uint256 upstake,
@@ -57,6 +59,7 @@ contract HCBase {
         lastPendedDate = proposal_.lastPendedDate;
         lastRelativeSupportFlipDate = proposal_.lastRelativeSupportFlipDate;
         lastRelativeSupport = proposal_.lastRelativeSupport;
+        resolutionCompensationFee = proposal_.resolutionCompensationFee;
         yea = proposal_.yea;
         nay = proposal_.nay;
         upstake = proposal_.upstake;
@@ -84,7 +87,7 @@ contract HCBase {
     uint256 public compensationFeePct;
 
     // Multiplier used to avoid losing precision when using division or calculating percentages.
-    uint256 internal constant PRECISION_MULTIPLIER = 10 ** 16;
+    uint256 internal constant PRECISION_MULTIPLIER = 10 ** 18;
 
     // Events.
     event ProposalCreated(uint256 indexed _proposalId, address indexed _creator, string _metadata);

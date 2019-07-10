@@ -46,7 +46,6 @@ contract HCStaking is HCVoting {
         require(!_proposalStateIs(_proposalId, ProposalState.Resolved), ERROR_PROPOSAL_IS_CLOSED);
         require(!_proposalStateIs(_proposalId, ProposalState.Boosted), ERROR_PROPOSAL_IS_BOOSTED);
         require(stakeToken.balanceOf(msg.sender) >= _amount, ERROR_SENDER_DOES_NOT_HAVE_ENOUGH_FUNDS);
-        require(stakeToken.allowance(msg.sender, address(this)) >= _amount, ERROR_INSUFFICIENT_ALLOWANCE);
 
         Proposal storage proposal_ = proposals[_proposalId];
 
@@ -60,6 +59,7 @@ contract HCStaking is HCVoting {
 
         // Extract the tokens from the sender and store them in this contract.
         // Note: This assumes that the sender has provided the required allowance to this contract.
+        require(stakeToken.allowance(msg.sender, address(this)) >= _amount, ERROR_INSUFFICIENT_ALLOWANCE);
         stakeToken.transferFrom(msg.sender, address(this), _amount);
 
         // Emit corresponding event.

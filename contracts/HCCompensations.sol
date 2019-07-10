@@ -18,6 +18,7 @@ contract HCCompensations is HCStaking {
 
         // Compensate the caller.
         uint256 fee = _calculateCompensationFee(_proposalId, proposal_.startDate.add(proposal_.lifetime));
+        proposal_.resolutionCompensationFee = fee;
         require(stakeToken.balanceOf(address(this)) >= fee, ERROR_VOTING_DOES_NOT_HAVE_ENOUGH_FUNDS);
         stakeToken.transfer(msg.sender, fee);
 
@@ -27,8 +28,8 @@ contract HCCompensations is HCStaking {
 
     function expireNonBoostedProposal(uint256 _proposalId) public {
         require(_proposalExists(_proposalId), ERROR_PROPOSAL_DOES_NOT_EXIST);
-        require(_proposalStateIs(_proposalId, ProposalState.Expired), ERROR_PROPOSAL_IS_CLOSED);
         require(!_proposalStateIs(_proposalId, ProposalState.Boosted), ERROR_PROPOSAL_IS_BOOSTED);
+        require(!_proposalStateIs(_proposalId, ProposalState.Expired), ERROR_PROPOSAL_IS_CLOSED);
 
         // Verify that the proposal's lifetime has ended.
         Proposal storage proposal_ = proposals[_proposalId];
@@ -36,6 +37,7 @@ contract HCCompensations is HCStaking {
 
         // Compensate the caller.
         uint256 fee = _calculateCompensationFee(_proposalId, proposal_.startDate.add(proposal_.lifetime));
+        proposal_.resolutionCompensationFee = fee;
         require(stakeToken.balanceOf(address(this)) >= fee, ERROR_VOTING_DOES_NOT_HAVE_ENOUGH_FUNDS);
         stakeToken.transfer(msg.sender, fee);
 
@@ -60,6 +62,7 @@ contract HCCompensations is HCStaking {
 
         // Compensate the caller.
         uint256 fee = _calculateCompensationFee(_proposalId, proposal_.lastPendedDate.add(pendedBoostPeriod));
+        proposal_.resolutionCompensationFee = fee;
         require(stakeToken.balanceOf(address(this)) >= fee, ERROR_VOTING_DOES_NOT_HAVE_ENOUGH_FUNDS);
         stakeToken.transfer(msg.sender, fee);
 
@@ -82,6 +85,7 @@ contract HCCompensations is HCStaking {
         require(now >= _cutoffDate, ERROR_INVALID_COMPENSATION_FEE);
 
         // Calculate fee.
+        // TODO: This will throw for proposals that have no stake (division by zero).
         uint256 timeSinceExpiration = now.sub(_cutoffDate);
         uint256 upstakePortion = proposal_.upstake.mul(PRECISION_MULTIPLIER) / compensationFeePct;
         _fee = timeSinceExpiration.mul(PRECISION_MULTIPLIER) / upstakePortion;
