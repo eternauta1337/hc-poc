@@ -4,6 +4,8 @@ module.exports = async (promise, errorMessage) => {
         await promise;
     }
     catch(e) { error = e }
-    if(error.message.includes(errorMessage)) return true;
+    const includesError = error.message.includes(errorMessage);
+    if(includesError) return true;
+    console.log(`Received error: ${error.message}`);
     return false;
 };

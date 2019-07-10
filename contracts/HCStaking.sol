@@ -12,8 +12,7 @@ contract HCStaking is HCVoting {
 
     // Confidence threshold.
     // A proposal can be boosted if it's confidence, determined by staking, is above this threshold.
-    // TODO: Make dynamic.
-    uint256 CONFIDENCE_THRESHOLD = uint256(4).mul(PRECISION_MULTIPLIER);
+    uint256 confidenceThresholdBase;
 
     // Events.
     event UpstakeProposal(uint256 indexed _proposalId, address indexed _staker, uint256 _amount);
@@ -27,10 +26,17 @@ contract HCStaking is HCVoting {
      */
 
     // TODO: Guard for only once calling.
-    function initializeStaking(Token _stakeToken, uint256 _pendedBoostPeriod) public {
+    function initializeStaking(
+        Token _stakeToken, 
+        uint256 _pendedBoostPeriod,
+        uint256 _confidenceThresholdBase
+    ) 
+        public 
+    {
         stakeToken = _stakeToken;
         // TODO: Check min pendendBoostPeriod?
         pendedBoostPeriod = _pendedBoostPeriod;
+        confidenceThresholdBase = _confidenceThresholdBase;
     }
 
     function stake(uint256 _proposalId, uint256 _amount, bool _supports) public {
@@ -149,8 +155,12 @@ contract HCStaking is HCVoting {
      * Utility functions.
      */
 
-    function _proposalHasEnoughConfidence(Proposal storage proposal_) internal view returns(bool _hasConfidence) {
-        uint256 currentConfidence = proposal_.upstake.mul(PRECISION_MULTIPLIER) / proposal_.downstake;
-        _hasConfidence = currentConfidence >= CONFIDENCE_THRESHOLD;
+    function _proposalHasEnoughConfidence(Proposal storage proposal_) internal view returns (bool _hasConfidence) {
+        uint256 currentConfidence;
+        if(proposal_.downstake == 0) currentConfidence = proposal_.upstake.mul(PRECISION_MULTIPLIER);
+        else currentConfidence = proposal_.upstake.mul(PRECISION_MULTIPLIER) / proposal_.downstake;
+        // TODO: The threshold should be elevated to the power of the number of currently boosted proposals.
+        uint256 confidenceThreshold = confidenceThresholdBase.mul(PRECISION_MULTIPLIER);
+        _hasConfidence = currentConfidence >= confidenceThreshold;
     }
 }

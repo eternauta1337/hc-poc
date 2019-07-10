@@ -18,6 +18,7 @@ contract HCBase {
 
     // Proposal data structure.
     struct Proposal {
+        uint256 id;
         ProposalState state;
         uint256 lifetime;
         uint256 startDate;
@@ -34,6 +35,7 @@ contract HCBase {
     }
 
     function getProposal(uint256 _proposalId) public view returns (
+        uint256 id,
         ProposalState state,
         uint256 lifetime,
         uint256 startDate,
@@ -48,6 +50,7 @@ contract HCBase {
         require(_proposalExists(_proposalId), ERROR_PROPOSAL_DOES_NOT_EXIST);
 
         Proposal storage proposal_ = proposals[_proposalId];
+        id = proposal_.id;
         state = proposal_.state;
         lifetime = proposal_.lifetime;
         startDate = proposal_.startDate;
@@ -72,23 +75,23 @@ contract HCBase {
     // Note: The effective lifetime of a proposal when it is boosted is dynamic, and can be extended
     // due to the requirement of quiet endings.
     uint256 public boostPeriod;
-    uint256 public boostPeriodExtensionAfterFlip;
+    uint256 public boostPeriodExtension;
 
     // Time for a pended proposal to become boosted if it maintained confidence within such period.
     uint256 public pendedBoostPeriod;
 
     // Compensation fee for external callers of functions that resolve and expire proposals.
-    uint256 compensationFeePct;
+    uint256 public compensationFeePct;
 
     // Multiplier used to avoid losing precision when using division or calculating percentages.
     uint256 internal constant PRECISION_MULTIPLIER = 10 ** 16;
 
     // Events.
-    event StartProposal(uint256 indexed _proposalId, address indexed _creator, string _metadata);
+    event ProposalCreated(uint256 indexed _proposalId, address indexed _creator, string _metadata);
     event ProposalStateChanged(uint256 indexed _proposalId, ProposalState _newState);
 
     // Error messages.
-    string internal constant ERROR_SENDER_DOES_NOT_HAVE_ENOUGH_FUNDS         = "VOTING_SENDER_DOES_NOT_HAVE_ENOUGH_FUNDS";
+    string internal constant ERROR_SENDER_DOES_NOT_HAVE_ENOUGH_FUNDS         = "VOTING_ERROR_SENDER_DOES_NOT_HAVE_ENOUGH_FUNDS";
     string internal constant ERROR_INSUFFICIENT_ALLOWANCE                    = "VOTING_ERROR_INSUFFICIENT_ALLOWANCE";
     string internal constant ERROR_SENDER_DOES_NOT_HAVE_REQUIRED_STAKE       = "VOTING_ERROR_SENDER_DOES_NOT_HAVE_REQUIRED_STAKE ";
     string internal constant ERROR_PROPOSAL_DOES_NOT_HAVE_REQUIRED_STAKE     = "VOTING_ERROR_PROPOSAL_DOES_NOT_HAVE_REQUIRED_STAKE ";
@@ -103,11 +106,29 @@ contract HCBase {
     string internal constant ERROR_INIT_SUPPORT_TOO_SMALL                    = "VOTING_ERROR_INIT_SUPPORT_TOO_SMALL";
     string internal constant ERROR_INIT_SUPPORT_TOO_BIG                      = "VOTING_ERROR_INIT_SUPPORT_TOO_BIG";
     string internal constant ERROR_USER_HAS_NO_VOTING_POWER                  = "VOTING_ERROR_USER_HAS_NO_VOTING_POWER";
-    string internal constant ERROR_NOT_ENOUGH_ABSOLUTE_SUPPORT               = "VOTING_NOT_ENOUGH_ABSOLUTE_SUPPORT";
+    string internal constant ERROR_NOT_ENOUGH_ABSOLUTE_SUPPORT               = "VOTING_ERROR_NOT_ENOUGH_ABSOLUTE_SUPPORT";
     string internal constant ERROR_NOT_ENOUGH_RELATIVE_SUPPORT               = "VOTING_ERROR_NOT_ENOUGH_RELATIVE_SUPPORT";
     string internal constant ERROR_VOTING_DOES_NOT_HAVE_ENOUGH_FUNDS         = "VOTING_ERROR_VOTING_DOES_NOT_HAVE_ENOUGH_FUNDS";
     string internal constant ERROR_PROPOSAL_IS_ACTIVE                        = "VOTING_ERROR_PROPOSAL_IS_ACTIVE";
     string internal constant ERROR_NO_STAKE_TO_WITHDRAW                      = "VOTING_ERROR_NO_STAKE_TO_WITHDRAW";
+
+    /*
+     * External functions.
+     */
+
+    function createProposal(string memory _metadata) public returns (uint256 proposalId) {
+
+        // Increment proposalId.
+        proposalId = numProposals;
+        numProposals++;
+
+        // Initialize proposal.
+        Proposal storage proposal_ = proposals[proposalId];
+        proposal_.id = proposalId;
+        proposal_.startDate = now;
+
+        emit ProposalCreated(proposalId, msg.sender, _metadata);
+    }
 
     /*
      * Utility functions.

@@ -14,7 +14,7 @@ contract HCVoting is HCBase {
     uint256 public supportPct;
 
     // Events.
-    event CastVote(uint256 indexed _proposalId, address indexed _voter, bool _supports, uint256 _stake);
+    event VoteCasted(uint256 indexed _proposalId, address indexed _voter, bool _supports, uint256 _stake);
   
     /*
      * External functions.
@@ -26,7 +26,7 @@ contract HCVoting is HCBase {
         uint256 _supportPct,
         uint256 _queuePeriod,
         uint256 _boostPeriod,
-        uint256 _boostPeriodExtensionAfterFlip,
+        uint256 _boostPeriodExtension,
         uint256 _compensationFeePct
     ) 
         public
@@ -43,25 +43,11 @@ contract HCVoting is HCBase {
         // TODO: Require min periods?
         queuePeriod = _queuePeriod;
         boostPeriod = _boostPeriod;
-        boostPeriodExtensionAfterFlip = _boostPeriodExtensionAfterFlip;
+        boostPeriodExtension= _boostPeriodExtension;
 
         // Assign fees.
         // TODO: Contain?
         compensationFeePct = _compensationFeePct;
-    }
-
-    // TODO: Could be in base
-    function createProposal(string memory _metadata) public returns (uint256 proposalId) {
-
-        // Increment proposalId.
-        proposalId = numProposals;
-        numProposals++;
-
-        // Initialize proposal.
-        Proposal storage proposal_ = proposals[proposalId];
-        proposal_.startDate = now;
-
-        emit StartProposal(proposalId, msg.sender, _metadata);
     }
 
     // TODO: Guard on who can vote?
@@ -100,7 +86,7 @@ contract HCVoting is HCBase {
         // Update the user's vote state.
         proposal_.votes[msg.sender] = _supports ? VoteState.Yea : VoteState.Nay;
 
-        emit CastVote(_proposalId,msg.sender, _supports, votingPower);
+        emit VoteCasted(_proposalId,msg.sender, _supports, votingPower);
 
         // A vote can change the state of a proposal, e.g. resolving it.
         _updateProposalAfterVoting(_proposalId);
@@ -142,7 +128,7 @@ contract HCVoting is HCBase {
             if(newSupport != currentSupport) {
                 proposal_.lastRelativeSupportFlipDate = now;
                 proposal_.lastRelativeSupport = newSupport;
-                proposal_.lifetime = proposal_.lifetime.add(boostPeriodExtensionAfterFlip);
+                proposal_.lifetime = proposal_.lifetime.add(boostPeriodExtension);
             }
         }
     }
