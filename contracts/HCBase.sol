@@ -1,4 +1,4 @@
-pragma solidity ^0.5.0;
+pragma solidity ^0.4.24;
 
 contract HCBase {
 
@@ -120,7 +120,7 @@ contract HCBase {
      * External functions.
      */
 
-    function createProposal(string memory _metadata) public returns (uint256 proposalId) {
+    function createProposal(string _metadata) public returns (uint256 proposalId) {
 
         // Increment proposalId.
         proposalId = numProposals;

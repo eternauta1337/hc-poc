@@ -27,13 +27,13 @@ describe('HolographicConsensus', () => {
         let elapsedTime = 0;
 
         const HOURS = 60 * 60;
-        const SUPPORT_PERCENT = 51;
-        const QUEUE_PERIOD_SECS = 24 * HOURS;
-        const PENDED_BOOST_PERIOD_SECS = 1 * HOURS;
-        const BOOST_PERIOD_SECS = 6 * HOURS;
-        const QUIET_ENDING_PERIOD_SECS = 1 * HOURS;
-        const COMPENSATION_FEE_PERCENT = 10;
-        const CONFIDENCE_THRESHOLD_BASE = 4;
+        const SUPPORT_PERCENT = 51; // MOD ROLE 1
+        const QUEUE_PERIOD_SECS = 24 * HOURS; // MOD ROLE 2
+        const PENDED_BOOST_PERIOD_SECS = 1 * HOURS; // MOD ROLE 2
+        const BOOST_PERIOD_SECS = 6 * HOURS; // MOD ROLE 2
+        const QUIET_ENDING_PERIOD_SECS = 1 * HOURS; // MOD ROLE 2
+        const COMPENSATION_FEE_PERCENT = 10; // MOD ROLE 3
+        const CONFIDENCE_THRESHOLD_BASE = 4; // MOD ROLE 4
         const PRECISION_MULTIPLIER = 10 ** 16;
         const INITIAL_VOTING_STAKE_TOKEN_BALANCE = 100000000000;
 

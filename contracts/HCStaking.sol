@@ -1,4 +1,4 @@
-pragma solidity ^0.5.0;
+pragma solidity ^0.4.24;
 
 import "./SafeMath.sol";
 import "./Token.sol";
@@ -75,6 +75,7 @@ contract HCStaking is HCVoting {
         // TODO: Different errors for these
         require(!_proposalStateIs(_proposalId, ProposalState.Expired), ERROR_PROPOSAL_IS_CLOSED);
         require(!_proposalStateIs(_proposalId, ProposalState.Resolved), ERROR_PROPOSAL_IS_CLOSED);
+        require(!_proposalStateIs(_proposalId, ProposalState.Boosted), ERROR_PROPOSAL_IS_BOOSTED);
 
         Proposal storage proposal_ = proposals[_proposalId];
 
