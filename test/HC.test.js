@@ -198,26 +198,6 @@ describe('HolographicConsensus', () => {
                     expect(await votingContract.methods.getVote(1, accounts[6]).call()).toBe(`2`);
                 });
 
-                test('Should automatically resolve a proposal once it reaches absolute majority support, emitting events', async () => {
-                    
-                    // Cast some random votes.
-                    await votingContract.methods.vote(0, false).send({ ...txParams, from: accounts[0] });
-                    await votingContract.methods.vote(0, false).send({ ...txParams, from: accounts[1] });
-                    await votingContract.methods.vote(0, false).send({ ...txParams, from: accounts[4] });
-                    await votingContract.methods.vote(0, true).send({ ...txParams, from: accounts[7] });
-                    const receipt = await votingContract.methods.vote(0, true).send({ ...txParams, from: accounts[8] });
-
-                    // Check that a ProposalStateChanged event was emitted.
-                    const event = receipt.events.ProposalStateChanged;
-                    expect(event).not.toBeNull();
-                    expect(event.returnValues._proposalId).toBe(`0`);
-                    expect(event.returnValues._newState).toBe(`4`); // ProposalState '4' = Resolved
-                    
-                    // Retrieve the proposal and verify that it has been resolved.
-                    const proposal = await votingContract.methods.getProposal(0).call();
-                    expect(proposal.state).toBe(`4`); // ProposalState '4' = Resolved
-                });
-
                 test('Should not resolve a proposal while it doesn\'t reach absolute majority', async () => {
                     
                     // Cast some random votes.
@@ -230,6 +210,97 @@ describe('HolographicConsensus', () => {
                     const proposal = await votingContract.methods.getProposal(3).call();
                     expect(proposal.state).toBe(`0`); // ProposalState '0' = Queued
                 });
+
+                describe('When proposals expire (directly from queue)', () => {
+
+                    beforeEach(async () => {
+                        
+                        // Advance time beyond queuePeriod.
+                        const time = QUEUE_PERIOD_SECS + 2 * HOURS;
+                        elapsedTime += time;
+                        await util.advanceTimeAndBlock(time);
+
+                        // Call proposal expiration.
+                        await votingContract.methods.expireNonBoostedProposal(0).send( {...txParams });
+                    });
+
+                    test('Voting should not be allowed', async () => {
+                        expect(await reverts(
+                            votingContract.methods.vote(0, false).send({ ...txParams, from: accounts[0] }),
+                            `VOTING_ERROR_PROPOSAL_IS_CLOSED`
+                        )).toBe(true);
+                    });
+
+                    test('Staking should not be allowed', async () => {
+
+                        // Mint some stake tokens and give allowance.
+                        await stakeTokenContract.methods.mint(accounts[0], 1000).send({ ...txParams });
+                        await stakeTokenContract.methods.approve(
+                            votingContract.options.address, 1000
+                        ).send({ ...txParams, from: accounts[0] });
+
+                        // Staking should fail.
+                        expect(await reverts(
+                            votingContract.methods.stake(0, 1, false).send({ ...txParams, from: accounts[0] }),
+                            `VOTING_ERROR_PROPOSAL_IS_CLOSED`
+                        )).toBe(true);
+                    });
+
+                }); // When proposals expire (directly from queue)
+
+                describe('When absolute majority support is reached in a proposal (directly from queue)', () => {
+
+                    let lastVoteReceipt;
+                    
+                    beforeEach(async () => {
+                        
+                        // Cast enough votes to achieve absolute support.
+                        await votingContract.methods.vote(0, false).send({ ...txParams, from: accounts[0] });
+                        await votingContract.methods.vote(0, false).send({ ...txParams, from: accounts[1] });
+                        await votingContract.methods.vote(0, false).send({ ...txParams, from: accounts[4] });
+                        await votingContract.methods.vote(0, true).send({ ...txParams, from: accounts[7] });
+                        lastVoteReceipt = await votingContract.methods.vote(0, true).send({ ...txParams, from: accounts[8] });
+                    });
+
+                    test('A ProposalStateChanged event with the Resolved state should be emitted', async () => {
+                        
+                        // Check that a ProposalStateChanged event was emitted.
+                        const event = lastVoteReceipt.events.ProposalStateChanged;
+                        expect(event).not.toBeNull();
+                        expect(event.returnValues._proposalId).toBe(`0`);
+                        expect(event.returnValues._newState).toBe(`4`); // ProposalState '4' = Resolved
+                    });
+
+                    test('The retrieved proposal\'s state should be Resolved', async () => {
+                        
+                        // Retrieve the proposal and verify that it has been resolved.
+                        const proposal = await votingContract.methods.getProposal(0).call();
+                        expect(proposal.state).toBe(`4`); // ProposalState '4' = Resolved
+                    });
+
+                    test('Should not allow additional votes on a resolved proposal', async () => {
+                        expect(await reverts(
+                            votingContract.methods.vote(0, false).send({ ...txParams, from: accounts[0] }),
+                            `VOTING_ERROR_PROPOSAL_IS_CLOSED`
+                        )).toBe(true);
+                    });
+
+                    test('Should not allow staking on a resolved proposal', async () => {
+
+                        // Mint some stake tokens and give allowance.
+                        await stakeTokenContract.methods.mint(accounts[0], 1000).send({ ...txParams });
+                        await stakeTokenContract.methods.approve(
+                            votingContract.options.address, 1000
+                        ).send({ ...txParams, from: accounts[0] });
+
+                        // Staking should fail.
+                        expect(await reverts(
+                            votingContract.methods.stake(0, 1, false).send({ ...txParams, from: accounts[0] }),
+                            `VOTING_ERROR_PROPOSAL_IS_CLOSED`
+                        )).toBe(true);
+                    });
+
+                }); // When absolute majority support is reached in a proposal
 
                 describe('When staking on proposals', () => {
 
